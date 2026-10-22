@@ -1,0 +1,6 @@
+{
+  "name": "Reseller.vaivaizone.com",
+  "description": "Enterprise digital services & top-up reseller portal and master admin control center with dual-balance wallet, KYC verification, and dynamic reseller rates.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,147 @@
+{
+  "users": [
+    {
+      "id": "usr-admin-1",
+      "name": "Master Admin (loverblack2022)",
+      "email": "loverblack2022@gmail.com",
+      "phone": "+8801700000001",
+      "role": "admin",
+      "tier": "VIP",
+      "discountPercent": 14,
+      "wallet": {
+        "totalBalance": 50000,
+        "lockedSecurityDeposit": 2000,
+        "usableBalance": 48000
+      },
+      "kyc": {
+        "status": "verified",
+        "phone": "+8801700000001",
+        "gmail": "loverblack2022@gmail.com",
+        "imoId": "IMO-VAI-ADMIN",
+        "screenshotUrl": "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=600&q=80",
+        "submittedAt": "2026-09-22T12:07:05.061Z",
+        "reviewedAt": "2026-09-23T12:07:05.061Z"
+      },
+      "depositApproved": true,
+      "isApprovedByAdmin": true,
+      "status": "active",
+      "avatarUrl": "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80",
+      "createdAt": "2026-09-22T12:07:05.061Z"
+    }
+  ],
+  "services": [
+    {
+      "id": "srv-imo",
+      "name": "IMO Diamonds Top-Up",
+      "category": "imo",
+      "icon": "💎",
+      "description": "Instant official IMO ID Diamond transfer. Global & BD regional servers.",
+      "inputType": "imo_id",
+      "inputLabel": "IMO ID / Registered Phone Number",
+      "inputPlaceholder": "e.g. 8801712345678 or @imoid_user",
+      "unitName": "Diamonds 💎",
+      "customerRatePer1000": 2250,
+      "resellerRatePer1000": 2180,
+      "minQuantity": 50,
+      "hidden": false
+    },
+    {
+      "id": "srv-games-ff",
+      "name": "Free Fire Diamonds",
+      "category": "games",
+      "icon": "🔥",
+      "description": "Instant Garena Player UID top-up for Free Fire Diamonds.",
+      "inputType": "player_id",
+      "inputLabel": "Free Fire Player UID",
+      "inputPlaceholder": "e.g. 1928471928",
+      "unitName": "Diamonds 💎",
+      "customerRatePer1000": 850,
+      "resellerRatePer1000": 800,
+      "minQuantity": 25,
+      "hidden": false
+    },
+    {
+      "id": "srv-bigo",
+      "name": "Bigo Live Beans",
+      "category": "bigo",
+      "icon": "🌟",
+      "description": "Direct Bigo ID recharge. Fast delivery for hosts and gifters.",
+      "inputType": "imo_id",
+      "inputLabel": "Bigo ID Number",
+      "inputPlaceholder": "e.g. bigo_19827461",
+      "unitName": "Beans 🫘",
+      "customerRatePer1000": 2100,
+      "resellerRatePer1000": 2020,
+      "minQuantity": 50,
+      "hidden": false
+    },
+    {
+      "id": "srv-tiktok",
+      "name": "TikTok Coins Top-Up",
+      "category": "tiktok",
+      "icon": "🎵",
+      "description": "Instant TikTok Live gifts & coins delivery via TikTok Username.",
+      "inputType": "player_id",
+      "inputLabel": "TikTok Username (@)",
+      "inputPlaceholder": "e.g. @vaivaizone_official",
+      "unitName": "Coins 🪙",
+      "customerRatePer1000": 1400,
+      "resellerRatePer1000": 1320,
+      "minQuantity": 70,
+      "hidden": false
+    },
+    {
+      "id": "srv-recharge",
+      "name": "All BD Mobile Recharge",
+      "category": "recharge",
+      "icon": "📱",
+      "description": "Instant Flexiload for GP, Banglalink, Robi, Airtel, Teletalk.",
+      "inputType": "phone",
+      "inputLabel": "Recipient Mobile Number (01XXXXXXXXX)",
+      "inputPlaceholder": "01XXXXXXXXX",
+      "unitName": "BDT ৳",
+      "customerRatePer1000": 1000,
+      "resellerRatePer1000": 970,
+      "minQuantity": 20,
+      "hidden": false
+    },
+    {
+      "id": "srv-games-pubg",
+      "name": "PUBG Mobile Unknown Cash (UC)",
+      "category": "games",
+      "icon": "⚡",
+      "description": "Instant PUBG Mobile UC top-up via Character ID & Name.",
+      "inputType": "player_id",
+      "inputLabel": "PUBG Character ID (UID)",
+      "inputPlaceholder": "e.g. 5192847192",
+      "unitName": "UC ⚡",
+      "customerRatePer1000": 1650,
+      "resellerRatePer1000": 1580,
+      "minQuantity": 60,
+      "hidden": false
+    }
+  ],
+  "depositRequests": [],
+  "transactions": [],
+  "orders": [],
+  "telegramConfig": {
+    "botToken": "",
+    "chatId": "",
+    "enabled": true,
+    "alertOnRegistration": true,
+    "alertOnKyc": true,
+    "alertOnOrder": true,
+    "alertOnDeposit": true
+  },
+  "telegramLogs": [
+    {
+      "id": "tg-init-1",
+      "event": "system",
+      "message": "🚀 Reseller.vaivaizone.com Bot Service Initialized and Ready for Webhooks.",
+      "timestamp": "2026-10-22T11:07:05.061Z",
+      "success": true,
+      "simulated": true
+    }
+  ],
+  "savedAt": "2026-10-22T12:07:24.820Z"
+}
