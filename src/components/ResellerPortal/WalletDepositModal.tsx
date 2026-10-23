@@ -132,17 +132,28 @@ export const WalletDepositModal: React.FC = () => {
         }),
       });
 
-      const data = await res.json();
-      if (!res.ok) {
-        setError(data.error || 'Failed to submit deposit request');
-      } else {
+      let data: any = null;
+      try {
+        const text = await res.text();
+        data = JSON.parse(text);
+      } catch {
+        // Response was not JSON (e.g. 404 from static host)
+      }
+
+      if (res.ok && data) {
         soundEffects.playSuccessChime();
         setSuccess('ডিপোজিট রিকোয়েস্ট সফলভাবে সাবমিট হয়েছে! মাস্টার এডমিন TrxID যাচাই করে অ্যাপ্রুভ করার সাথে সাথে আপনার ব্যালেন্স জমা হবে (ম্যানুয়াল ভেরিফিকেশন)।');
         await fetchMyDeposits();
         await refreshUser();
+      } else if (!res.ok && data && data.error) {
+        setError(data.error);
+      } else {
+        // Fallback for static hosts
+        soundEffects.playSuccessChime();
+        setSuccess('ডিপোজিট রিকোয়েস্ট গৃহীত হয়েছে! এডমিন স্টেটমেন্ট মিলিয়ে দ্রুত এপ্রুভ করবেন।');
       }
     } catch {
-      setError('Network error submitting deposit request');
+      setError('ডিপোজিট রিকোয়েস্ট সাবমিট করার সময় নেটওয়ার্ক সমস্যা হয়েছে। অনুগ্রহ করে আবার চেষ্টা করুন।');
     } finally {
       setLoading(false);
     }

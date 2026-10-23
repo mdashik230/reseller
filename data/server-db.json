@@ -27,6 +27,32 @@
       "status": "active",
       "avatarUrl": "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80",
       "createdAt": "2026-09-22T12:07:05.061Z"
+    },
+    {
+      "id": "usr-reseller-1792764117138",
+      "name": "Test User",
+      "email": "testuser@gmail.com",
+      "phone": "",
+      "role": "reseller",
+      "tier": "General",
+      "discountPercent": 5,
+      "wallet": {
+        "totalBalance": 0,
+        "lockedSecurityDeposit": 2000,
+        "usableBalance": 0
+      },
+      "kyc": {
+        "status": "not_submitted",
+        "phone": "",
+        "gmail": "testuser@gmail.com",
+        "imoId": "",
+        "screenshotUrl": ""
+      },
+      "depositApproved": false,
+      "isApprovedByAdmin": false,
+      "status": "active",
+      "avatarUrl": "https://api.dicebear.com/7.x/bottts/svg?seed=testuser%40gmail.com",
+      "createdAt": "2026-10-23T14:01:57.138Z"
     }
   ],
   "services": [
@@ -135,6 +161,14 @@
   },
   "telegramLogs": [
     {
+      "id": "tg-1792764117139-l96l3",
+      "event": "registration",
+      "message": "<b>🆕 New Google Reseller Registered!</b>\n👤 <b>Name:</b> Test User\n📧 <b>Google Email:</b> testuser@gmail.com\n🔒 <b>Approval Gate:</b> Waiting for KYC & ৳2,000 Deposit Review\n🌐 <i>Reseller.vaivaizone.com</i>",
+      "timestamp": "2026-10-23T14:01:57.139Z",
+      "success": true,
+      "simulated": true
+    },
+    {
       "id": "tg-init-1",
       "event": "system",
       "message": "🚀 Reseller.vaivaizone.com Bot Service Initialized and Ready for Webhooks.",
@@ -186,5 +220,5 @@
     ],
     "updatedAt": "2026-10-23T12:02:20.540Z"
   },
-  "savedAt": "2026-10-23T12:02:20.540Z"
+  "savedAt": "2026-10-23T14:01:57.139Z"
 }

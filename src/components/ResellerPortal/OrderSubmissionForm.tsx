@@ -150,10 +150,17 @@ export const OrderSubmissionForm: React.FC<OrderSubmissionFormProps> = ({ onOrde
         }),
       });
 
-      const data = await res.json();
-      if (!res.ok) {
+      let data: any = null;
+      try {
+        const text = await res.text();
+        data = JSON.parse(text);
+      } catch {
+        // Non-JSON response
+      }
+
+      if (!res.ok || !data) {
         soundEffects.playWarningChime();
-        setErrorMsg(data.error || 'Failed to submit order');
+        setErrorMsg(data?.error || 'অর্ডার সাবমিট করতে সমস্যা হয়েছে। অনুগ্রহ করে ইন্টারনেট ও ব্যালেন্স চেক করুন।');
       } else {
         soundEffects.playSuccessChime();
         setSuccessOrder(data.order);

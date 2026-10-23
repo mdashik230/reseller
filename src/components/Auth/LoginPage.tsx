@@ -51,8 +51,14 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
         return;
       }
     } catch (popupErr: any) {
-      console.warn('Firebase popup notice:', popupErr?.message || popupErr);
-      setError('পপআপ ব্লক হয়ে থাকলে নিচে সরাসরি আপনার জিমেইল লিখে লগইন করুন।');
+      console.warn('Firebase popup notice:', popupErr?.code, popupErr?.message || popupErr);
+      if (popupErr?.code === 'auth/unauthorized-domain') {
+        setError('Firebase-এ আপনার ডোমেইনটি Authorized Domain হিসেবে যুক্ত করা নেই। দয়া করে নিচে সরাসরি আপনার জিমেইল লিখে "Sign In with Gmail" এ ক্লিক করুন।');
+      } else if (popupErr?.code === 'auth/popup-blocked') {
+        setError('ব্রাউজার থেকে গুগল পপআপ ব্লক করা হয়েছে। অনুগ্রহ করে নিচে সরাসরি জিমেইল লিখে লগইন করুন।');
+      } else {
+        setError('পপআপ দিয়ে লগইন সম্ভব না হলে নিচে সরাসরি আপনার জিমেইল লিখে "Sign In with Gmail" বাটনে ক্লিক করুন।');
+      }
     } finally {
       setLoading(false);
     }
@@ -61,10 +67,14 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
   const handleCustomSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
-    const trimmed = customGmail.trim().toLowerCase();
+    let trimmed = customGmail.trim().toLowerCase();
     if (!trimmed) {
       setError('অনুগ্রহ করে আপনার গুগল জিমেইল (@gmail.com) লিখুন।');
       return;
+    }
+    // Auto-append @gmail.com if user typed only the username
+    if (!trimmed.includes('@')) {
+      trimmed = `${trimmed}@gmail.com`;
     }
     if (!trimmed.endsWith('@gmail.com') && !trimmed.endsWith('@vaivaizone.com') && trimmed !== 'loverblack2022@gmail') {
       setError('শুধুমাত্র আসল ও অনুমোদিত Google একাউন্ট (@gmail.com) গ্রহণযোগ্য।');
