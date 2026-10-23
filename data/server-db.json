@@ -143,5 +143,48 @@
       "simulated": true
     }
   ],
-  "savedAt": "2026-10-22T12:07:24.820Z"
+  "paymentSettings": {
+    "minDepositAmount": 100,
+    "notice": "টাকা পাঠানোর পর অবশ্যই সঠিক TrxID এবং সেন্ডার নাম্বার দিয়ে ডিপোজিট রিকোয়েস্ট সাবমিট করুন। এডমিন ম্যানুয়ালি যাচাই করে সাথে সাথে এপ্রুভ করবেন।",
+    "accounts": [
+      {
+        "id": "bkash",
+        "name": "bKash",
+        "number": "01799887766",
+        "type": "Merchant (Payment)",
+        "instruction": "বিকাশ অ্যাপ থেকে \"Payment\" অপশনে গিয়ে উক্ত নাম্বারে টাকা পাঠান।",
+        "enabled": true,
+        "minDeposit": 100
+      },
+      {
+        "id": "nagad",
+        "name": "Nagad",
+        "number": "01811223344",
+        "type": "Personal (Send Money)",
+        "instruction": "নগদ অ্যাপ বা *167# ডায়াল করে \"Send Money\" করুন।",
+        "enabled": true,
+        "minDeposit": 100
+      },
+      {
+        "id": "rocket",
+        "name": "Rocket",
+        "number": "01922334455-8",
+        "type": "Personal (Send Money)",
+        "instruction": "রকেট একাউন্টে ১২ ডিজিটের নাম্বারে সেন্ড মানি করুন।",
+        "enabled": true,
+        "minDeposit": 100
+      },
+      {
+        "id": "bank",
+        "name": "Bank Transfer",
+        "number": "Bank Asia A/C: 088192847192 (VaiVaiZone Tech)",
+        "type": "Online / Branch Deposit",
+        "instruction": "ব্যাংক ডিপোজিট স্লিপ বা অনলাইন ট্রান্সফার রেফারেন্স দিন।",
+        "enabled": true,
+        "minDeposit": 500
+      }
+    ],
+    "updatedAt": "2026-10-23T12:02:20.540Z"
+  },
+  "savedAt": "2026-10-23T12:02:20.540Z"
 }

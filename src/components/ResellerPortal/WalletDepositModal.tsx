@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
-import { DepositRequest } from '../../types';
+import { DepositRequest, PaymentAccount } from '../../types';
 import { formatBDT, formatDate } from '../../utils/formatters';
 import { soundEffects } from '../../utils/audio';
 import {
@@ -14,13 +14,26 @@ import {
   Copy,
   Check,
   Clock,
-  Smartphone
+  Smartphone,
+  CreditCard
 } from 'lucide-react';
+
+const fallbackAccounts: PaymentAccount[] = [
+  { id: 'acc-1', name: 'bKash', number: '01799887766', type: 'Merchant Payment', instruction: 'Make Payment করুন', enabled: true },
+  { id: 'acc-2', name: 'Nagad', number: '01811223344', type: 'Personal (Send Money)', instruction: 'Send Money করুন', enabled: true },
+  { id: 'acc-3', name: 'Rocket', number: '01922334455-8', type: 'Personal', instruction: 'Send Money করুন', enabled: true },
+  { id: 'acc-4', name: 'Upay', number: '01988776655', type: 'Personal', instruction: 'Send Money করুন', enabled: true },
+  { id: 'acc-5', name: 'Bank Asia', number: 'A/C: 088192847192 (VaiVaiZone Tech)', type: 'Bank Transfer', instruction: 'ব্যাংক ট্রান্সফার করুন', enabled: true },
+];
 
 export const WalletDepositModal: React.FC = () => {
   const { openDepositModal, setOpenDepositModal, currentUser, refreshUser } = useAuth();
 
-  const [method, setMethod] = useState<'bkash' | 'nagad' | 'rocket' | 'bank'>('bkash');
+  const [paymentAccounts, setPaymentAccounts] = useState<PaymentAccount[]>(fallbackAccounts);
+  const [selectedAccountId, setSelectedAccountId] = useState<string>(fallbackAccounts[0].id);
+  const [depositNotice, setDepositNotice] = useState<string>('');
+  const [minDeposit, setMinDeposit] = useState<number>(100);
+
   const [amount, setAmount] = useState('2000');
   const [senderNumber, setSenderNumber] = useState(currentUser?.phone || '01819283746');
   const [trxId, setTrxId] = useState(`BKS${Date.now().toString().slice(-6)}`);
@@ -31,6 +44,29 @@ export const WalletDepositModal: React.FC = () => {
 
   // User's own deposit requests history
   const [myDeposits, setMyDeposits] = useState<DepositRequest[]>([]);
+
+  const fetchPaymentMethods = async () => {
+    try {
+      const res = await fetch('/api/payment-methods');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.accounts && Array.isArray(data.accounts) && data.accounts.length > 0) {
+          setPaymentAccounts(data.accounts);
+          if (!data.accounts.some((a: PaymentAccount) => a.id === selectedAccountId)) {
+            setSelectedAccountId(data.accounts[0].id);
+          }
+        }
+        if (data.notice) {
+          setDepositNotice(data.notice);
+        }
+        if (data.minDepositAmount) {
+          setMinDeposit(data.minDepositAmount);
+        }
+      }
+    } catch {
+      // Use fallback accounts
+    }
+  };
 
   const fetchMyDeposits = async () => {
     if (!currentUser) return;
@@ -47,6 +83,7 @@ export const WalletDepositModal: React.FC = () => {
 
   useEffect(() => {
     if (openDepositModal) {
+      fetchPaymentMethods();
       fetchMyDeposits();
     }
   }, [openDepositModal, currentUser?.id]);
@@ -55,18 +92,14 @@ export const WalletDepositModal: React.FC = () => {
 
   const currentTotal = currentUser.wallet.totalBalance;
   const numAmount = parseFloat(amount) || 0;
-
-  const paymentNumbers = {
-    bkash: '01799887766 (bKash Merchant Payment)',
-    nagad: '01811223344 (Nagad Personal Send Money)',
-    rocket: '01922334455-8 (Rocket Personal)',
-    bank: 'Bank Asia A/C: 088192847192 (VaiVaiZone Tech)',
-  };
+  const selectedAccount = paymentAccounts.find(a => a.id === selectedAccountId) || paymentAccounts[0];
 
   const handleCopy = () => {
-    navigator.clipboard.writeText(paymentNumbers[method]);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    if (selectedAccount?.number) {
+      navigator.clipboard.writeText(selectedAccount.number);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -74,8 +107,9 @@ export const WalletDepositModal: React.FC = () => {
     setError(null);
     setSuccess(null);
 
-    if (numAmount < 100) {
-      setError('মিনিমাম ডিপোজিট ১০০৳');
+    const minAmt = selectedAccount?.minDeposit || minDeposit || 100;
+    if (numAmount < minAmt) {
+      setError(`মিনিমাম ডিপোজিট ৳${minAmt}`);
       return;
     }
     if (!senderNumber.trim() || !trxId.trim()) {
@@ -91,10 +125,10 @@ export const WalletDepositModal: React.FC = () => {
         body: JSON.stringify({
           userId: currentUser.id,
           amount: numAmount,
-          method,
+          method: (selectedAccount?.name || 'bkash').toLowerCase(),
           senderNumber: senderNumber.trim(),
           trxId: trxId.trim(),
-          note: `Deposit of ৳${numAmount} via ${method.toUpperCase()} by ${currentUser.name}`,
+          note: `Deposit of ৳${numAmount} via ${selectedAccount?.name} (${selectedAccount?.number}) by ${currentUser.name}`,
         }),
       });
 
@@ -139,14 +173,14 @@ export const WalletDepositModal: React.FC = () => {
           </div>
         </div>
 
-        {/* Manual Approval Notice */}
+        {/* Manual Approval Notice & Admin Custom Notice */}
         <div className="p-3.5 rounded-2xl bg-amber-950/20 border border-amber-500/30 mb-4 text-xs space-y-1.5 text-amber-200">
           <div className="flex items-center gap-1.5 font-bold text-amber-300">
             <ShieldCheck className="w-4 h-4 text-amber-400" />
             <span>এডমিন ম্যানুয়াল ভেরিফিকেশন পলিসি (Manual Approval):</span>
           </div>
           <p className="text-[11px] leading-relaxed text-slate-300">
-            ডিপোজিট অট্যোমেটিক হবে না। আপনি টাকা পাঠিয়ে নিচে <strong>সেন্ডার নাম্বার</strong> ও <strong>TrxID</strong> সাবমিট করবেন। এডমিন স্টেটমেন্ট মিলিয়ে এপ্রুভ করলে সাথে সাথে ওয়ালেটে ব্যালেন্স জমা হবে।
+            {depositNotice || 'ডিপোজিট অট্যোমেটিক হবে না। আপনি টাকা পাঠিয়ে নিচে সেন্ডার নাম্বার ও TrxID সাবমিট করবেন। এডমিন স্টেটমেন্ট মিলিয়ে এপ্রুভ করলে সাথে সাথে ওয়ালেটে ব্যালেন্স জমা হবে।'}
           </p>
         </div>
 
@@ -169,52 +203,59 @@ export const WalletDepositModal: React.FC = () => {
           {/* Method Selector */}
           <div>
             <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-              ১. ডিপোজিট মাধ্যম নির্বাচন করুন (Select Method)
+              ১. ডিপোজিট মাধ্যম নির্বাচন করুন (Select Payment Method)
             </label>
-            <div className="grid grid-cols-4 gap-2">
-              {[
-                { id: 'bkash', name: 'bKash' },
-                { id: 'nagad', name: 'Nagad' },
-                { id: 'rocket', name: 'Rocket' },
-                { id: 'bank', name: 'Bank' },
-              ].map(m => (
-                <button
-                  type="button"
-                  key={m.id}
-                  onClick={() => {
-                    setMethod(m.id as any);
-                    setTrxId(`${m.name.slice(0, 3).toUpperCase()}${Date.now().toString().slice(-6)}`);
-                  }}
-                  className={`py-2 rounded-xl text-xs font-bold border transition-colors ${
-                    method === m.id
-                      ? 'bg-emerald-500/20 border-emerald-500 text-emerald-400'
-                      : 'bg-slate-800 border-slate-700 text-slate-400 hover:text-white'
-                  }`}
-                >
-                  {m.name}
-                </button>
-              ))}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              {paymentAccounts.map(acc => {
+                const isSelected = acc.id === selectedAccountId;
+                return (
+                  <button
+                    type="button"
+                    key={acc.id}
+                    onClick={() => {
+                      setSelectedAccountId(acc.id);
+                      setTrxId(`${acc.name.slice(0, 3).toUpperCase()}${Date.now().toString().slice(-6)}`);
+                    }}
+                    className={`p-2.5 rounded-xl text-xs font-bold border transition-colors flex flex-col items-center justify-center gap-0.5 ${
+                      isSelected
+                        ? 'bg-emerald-500/20 border-emerald-500 text-emerald-400 shadow-sm'
+                        : 'bg-slate-800 border-slate-700 text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <span className="font-extrabold">{acc.name}</span>
+                    <span className="text-[10px] text-slate-400 font-normal truncate max-w-[100px]">{acc.type}</span>
+                  </button>
+                );
+              })}
             </div>
           </div>
 
           {/* Official Receiver Account Number with Copy */}
-          <div className="p-3 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-between text-xs">
-            <div>
-              <span className="text-[10px] text-slate-400 uppercase font-bold block">
-                VaiVaiZone অফিসিয়াল পেমেন্ট নাম্বার
-              </span>
-              <span className="font-mono font-bold text-emerald-400">
-                {paymentNumbers[method]}
-              </span>
+          {selectedAccount && (
+            <div className="p-3.5 rounded-2xl bg-slate-800/90 border border-slate-700/80 flex items-center justify-between text-xs gap-3">
+              <div className="min-w-0 flex-1">
+                <span className="text-[10px] text-slate-400 uppercase font-bold block">
+                  VaiVaiZone অফিসিয়াল {selectedAccount.name} নাম্বার ({selectedAccount.type})
+                </span>
+                <span className="font-mono font-extrabold text-emerald-400 text-base sm:text-lg select-all block mt-0.5">
+                  {selectedAccount.number}
+                </span>
+                {selectedAccount.instruction && (
+                  <p className="text-[11px] text-amber-300/90 mt-1 flex items-center gap-1 font-medium">
+                    <span>💡 নিয়ম: {selectedAccount.instruction}</span>
+                  </p>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={handleCopy}
+                className="px-3 py-2 rounded-xl bg-slate-700 hover:bg-slate-600 active:scale-95 text-slate-200 transition-all flex items-center gap-1.5 shrink-0 font-bold border border-slate-600"
+              >
+                {copied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4 text-cyan-400" />}
+                <span className="text-[11px]">{copied ? 'কপি হয়েছে!' : 'নাম্বার কপি'}</span>
+              </button>
             </div>
-            <button
-              type="button"
-              onClick={handleCopy}
-              className="p-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-300 transition-colors"
-            >
-              {copied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
-            </button>
-          </div>
+          )}
 
           {/* Amount input & Quick Presets */}
           <div>

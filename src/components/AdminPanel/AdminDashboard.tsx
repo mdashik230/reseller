@@ -7,6 +7,7 @@ import { DepositApprovalManager } from './DepositApprovalManager';
 import { ResellerManager } from './ResellerManager';
 import { CategoryServiceManager } from './CategoryServiceManager';
 import { TelegramIntegrationManager } from './TelegramIntegrationManager';
+import { PaymentSettingsManager } from './PaymentSettingsManager';
 import {
   TrendingUp,
   Users,
@@ -16,12 +17,13 @@ import {
   Lock,
   Bot,
   Building,
-  Wallet
+  Wallet,
+  CreditCard
 } from 'lucide-react';
 
 export const AdminDashboard: React.FC = () => {
   const { currentUser } = useAuth();
-  const [activeTab, setActiveTab] = useState<'dispatch' | 'kyc' | 'deposits' | 'categories' | 'resellers' | 'telegram'>('dispatch');
+  const [activeTab, setActiveTab] = useState<'dispatch' | 'kyc' | 'deposits' | 'categories' | 'payments' | 'resellers' | 'telegram'>('dispatch');
   const [stats, setStats] = useState({
     totalResellers: 0,
     verifiedResellers: 0,
@@ -152,6 +154,7 @@ export const AdminDashboard: React.FC = () => {
         {[
           { id: 'dispatch', label: 'Order Dispatch Queue', count: stats.pendingOrders, icon: Clock },
           { id: 'deposits', label: 'Deposit Requests (ম্যানুয়াল ভেরিফিকেশন)', count: stats.pendingDepositsCount, icon: Wallet },
+          { id: 'payments', label: 'পেমেন্ট নাম্বার সেটিংস (bKash/Nagad/Rocket)', icon: CreditCard },
           { id: 'kyc', label: 'KYC & Activation Approvals', count: stats.pendingKycCount, icon: ShieldCheck },
           { id: 'categories', label: '১০০০ রেট ও ক্যাটাগরি ম্যানেজার', icon: Layers },
           { id: 'resellers', label: 'Resellers & Balance', icon: Users },
@@ -185,7 +188,8 @@ export const AdminDashboard: React.FC = () => {
 
       {/* Tab Panels */}
       {activeTab === 'dispatch' && <OrderDispatchManager />}
-      {activeTab === 'deposits' && <DepositApprovalManager />}
+      {activeTab === 'deposits' && <DepositApprovalManager onNavigateToPayments={() => setActiveTab('payments')} />}
+      {activeTab === 'payments' && <PaymentSettingsManager />}
       {activeTab === 'kyc' && <KycVerificationManager />}
       {activeTab === 'categories' && <CategoryServiceManager />}
       {activeTab === 'resellers' && <ResellerManager />}

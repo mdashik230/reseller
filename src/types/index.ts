@@ -147,3 +147,21 @@ export interface TelegramLog {
   success: boolean;
   simulated: boolean;
 }
+
+export interface PaymentAccount {
+  id: string;
+  name: string;
+  number: string;
+  type: string; // 'Merchant' | 'Personal' | 'Agent' | string
+  instruction: string;
+  enabled: boolean;
+  minDeposit?: number;
+}
+
+export interface PaymentSettings {
+  accounts: PaymentAccount[];
+  notice: string;
+  minDepositAmount: number;
+  updatedAt?: string;
+}
+

@@ -13,10 +13,15 @@ import {
   ShieldCheck,
   Check,
   Copy,
-  Smartphone
+  Smartphone,
+  CreditCard
 } from 'lucide-react';
 
-export const DepositApprovalManager: React.FC = () => {
+interface DepositApprovalManagerProps {
+  onNavigateToPayments?: () => void;
+}
+
+export const DepositApprovalManager: React.FC<DepositApprovalManagerProps> = ({ onNavigateToPayments }) => {
   const [deposits, setDeposits] = useState<DepositRequest[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
@@ -109,7 +114,18 @@ export const DepositApprovalManager: React.FC = () => {
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {onNavigateToPayments && (
+            <button
+              onClick={onNavigateToPayments}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-500/30 text-cyan-400 text-xs font-bold transition-all shadow-sm"
+              title="পেমেন্ট নাম্বার ও সেটিংস পরিবর্তন করুন"
+            >
+              <CreditCard className="w-3.5 h-3.5" />
+              <span>পেমেন্ট নাম্বার সেটিংস</span>
+            </button>
+          )}
+
           <div className="relative">
             <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
             <input

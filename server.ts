@@ -10,7 +10,9 @@ import {
   ServiceItem,
   Order,
   TelegramConfig,
-  TelegramLog
+  TelegramLog,
+  PaymentAccount,
+  PaymentSettings
 } from './src/types/index.ts';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -230,6 +232,61 @@ let services: ServiceItem[] = [
 
 let orders: Order[] = [];
 
+// Default Payment Accounts and Deposit Notice
+const defaultPaymentSettings: PaymentSettings = {
+  minDepositAmount: 100,
+  notice: 'টাকা পাঠানোর পর অবশ্যই সঠিক TrxID এবং সেন্ডার নাম্বার দিয়ে ডিপোজিট রিকোয়েস্ট সাবমিট করুন। এডমিন ভেরিফাই করে ৫-১৫ মিনিটের মধ্যে ব্যালেন্স যোগ করে দিবে।',
+  accounts: [
+    {
+      id: 'bkash',
+      name: 'bKash',
+      number: '01799887766',
+      type: 'Merchant (Payment)',
+      instruction: 'বিকাশ অ্যাপ থেকে "Payment" অপশনে গিয়ে উক্ত নাম্বারে টাকা পাঠান।',
+      enabled: true,
+      minDeposit: 100,
+    },
+    {
+      id: 'nagad',
+      name: 'Nagad',
+      number: '01811223344',
+      type: 'Personal (Send Money)',
+      instruction: 'নগদ অ্যাপ বা *167# ডায়াল করে "Send Money" করুন।',
+      enabled: true,
+      minDeposit: 100,
+    },
+    {
+      id: 'rocket',
+      name: 'Rocket',
+      number: '01922334455-8',
+      type: 'Personal (Send Money)',
+      instruction: 'রকেট একাউন্টে ১২ ডিজিটের নাম্বারে সেন্ড মানি করুন।',
+      enabled: true,
+      minDeposit: 100,
+    },
+    {
+      id: 'upay',
+      name: 'Upay',
+      number: '01711002233',
+      type: 'Personal / Merchant',
+      instruction: 'উপায় অ্যাপ থেকে সরাসরি সেন্ড মানি বা পেমেন্ট করুন।',
+      enabled: false,
+      minDeposit: 100,
+    },
+    {
+      id: 'bank',
+      name: 'Bank Transfer',
+      number: 'Bank Asia A/C: 088192847192 (VaiVaiZone Tech)',
+      type: 'Online / Branch Deposit',
+      instruction: 'ব্যাংক ডিপোজিট স্লিপ বা অনলাইন ট্রান্সফার রেফারেন্স দিন।',
+      enabled: true,
+      minDeposit: 500,
+    },
+  ],
+};
+
+let paymentSettings: PaymentSettings = defaultPaymentSettings;
+
 // Helper: update user wallet state
 function recalculateWallet(user: User) {
   user.wallet.lockedSecurityDeposit = LOCKED_DEPOSIT;
@@ -250,6 +307,7 @@ function saveDatabase() {
       orders,
       telegramConfig,
       telegramLogs,
+      paymentSettings,
       savedAt: new Date().toISOString(),
     };
     fs.writeFileSync(DB_FILE, JSON.stringify(payload, null, 2), 'utf-8');
@@ -286,6 +344,9 @@ function loadDatabase() {
       }
       if (Array.isArray(parsed.telegramLogs)) {
         telegramLogs = parsed.telegramLogs;
+      }
+      if (parsed.paymentSettings && Array.isArray(parsed.paymentSettings.accounts) && parsed.paymentSettings.accounts.length > 0) {
+        paymentSettings = parsed.paymentSettings;
       }
       console.log('✅ Persistent Database loaded from disk.');
     } else {
@@ -735,6 +796,53 @@ app.get('/api/wallet/transactions', (req, res) => {
     return res.json({ transactions: list });
   }
   return res.json({ transactions });
+});
+
+// ----------------- PAYMENT METHODS & NUMBERS CONFIGURATION ----------------- //
+
+// Public route for Resellers to get active payment numbers and deposit notice
+app.get('/api/payment-methods', (req, res) => {
+  const enabledAccounts = paymentSettings.accounts.filter(a => a.enabled);
+  return res.json({
+    accounts: enabledAccounts,
+    notice: paymentSettings.notice,
+    minDepositAmount: paymentSettings.minDepositAmount,
+    updatedAt: paymentSettings.updatedAt,
+  });
+});
+
+// Admin route to get all payment accounts and settings
+app.get('/api/admin/payment-methods', (req, res) => {
+  return res.json({ paymentSettings });
+});
+
+// Admin route to update payment accounts and deposit notice
+app.post('/api/admin/payment-methods', (req, res) => {
+  const { accounts, notice, minDepositAmount } = req.body;
+  if (Array.isArray(accounts)) {
+    paymentSettings.accounts = accounts;
+  }
+  if (notice !== undefined) {
+    paymentSettings.notice = notice;
+  }
+  if (minDepositAmount !== undefined) {
+    paymentSettings.minDepositAmount = parseFloat(minDepositAmount) || 100;
+  }
+  paymentSettings.updatedAt = new Date().toISOString();
+  saveDatabase();
+
+  dispatchTelegramAlert(
+    'test',
+    `<b>⚙️ PAYMENT METHODS UPDATED!</b>\n` +
+    `💳 <b>Active Accounts:</b> ${paymentSettings.accounts.filter(a => a.enabled).map(a => `${a.name}: ${a.number}`).join(', ')}\n` +
+    `🕒 <i>Updated by Master Admin</i>`
+  );
+
+  return res.json({
+    success: true,
+    message: 'পেমেন্ট নাম্বার ও সেটিংস সফলভাবে সেভ হয়েছে!',
+    paymentSettings,
+  });
 });
 
 // 5. Orders: Top-up Diamonds / Quantity with Rate per 1000 Calculation
