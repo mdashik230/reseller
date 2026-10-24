@@ -689,13 +689,6 @@ export const persistentStore = {
       alertOnDeposit: true,
     };
 
-    if (typeof window !== 'undefined') {
-      try {
-        const raw = localStorage.getItem('vaivai_telegram_config');
-        if (raw) return JSON.parse(raw);
-      } catch {}
-    }
-
     try {
       const res = await fetch('/api/admin/telegram/config');
       const data = await res.json();
@@ -703,9 +696,16 @@ export const persistentStore = {
         if (typeof window !== 'undefined') {
           localStorage.setItem('vaivai_telegram_config', JSON.stringify(data.config));
         }
-        return data.config;
+        return { ...defaultConfig, ...data.config };
       }
     } catch {}
+
+    if (typeof window !== 'undefined') {
+      try {
+        const raw = localStorage.getItem('vaivai_telegram_config');
+        if (raw) return { ...defaultConfig, ...JSON.parse(raw) };
+      } catch {}
+    }
 
     return defaultConfig;
   },

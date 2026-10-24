@@ -56,14 +56,24 @@ async function dispatchTelegramAlert(event: TelegramLog['event'], message: strin
     simulated: true,
   };
 
-  if (telegramConfig.enabled && telegramConfig.botToken && telegramConfig.chatId) {
+  const cleanBotToken = (telegramConfig.botToken || '').trim().replace(/^bot/i, '');
+  const cleanChatId = (telegramConfig.chatId || '').trim();
+
+  // Check event-specific triggers
+  let isTriggerEnabled = telegramConfig.enabled !== false;
+  if (event === 'registration' && telegramConfig.alertOnRegistration === false) isTriggerEnabled = false;
+  if (event === 'kyc_submitted' && telegramConfig.alertOnKyc === false) isTriggerEnabled = false;
+  if (event === 'new_order' && telegramConfig.alertOnOrder === false) isTriggerEnabled = false;
+  if (event === 'deposit' && telegramConfig.alertOnDeposit === false) isTriggerEnabled = false;
+
+  if (isTriggerEnabled && cleanBotToken && cleanChatId) {
     try {
-      const url = `https://api.telegram.org/bot${telegramConfig.botToken}/sendMessage`;
+      const url = `https://api.telegram.org/bot${cleanBotToken}/sendMessage`;
       const res = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          chat_id: telegramConfig.chatId,
+          chat_id: cleanChatId,
           text: message,
           parse_mode: 'HTML',
         }),
@@ -73,8 +83,24 @@ async function dispatchTelegramAlert(event: TelegramLog['event'], message: strin
         logItem.simulated = false;
         logItem.success = true;
       } else {
-        logItem.success = false;
-        logItem.message += ` (Telegram API error: ${data.description || 'Unknown'})`;
+        // Fallback: retry with stripped plain text in case HTML parse_mode failed on special characters
+        const plainText = message.replace(/<[^>]*>?/gm, '');
+        const retryRes = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chat_id: cleanChatId,
+            text: plainText,
+          }),
+        });
+        const retryData = await retryRes.json();
+        if (retryData.ok) {
+          logItem.simulated = false;
+          logItem.success = true;
+        } else {
+          logItem.success = false;
+          logItem.message += ` (Telegram API error: ${data.description || retryData.description || 'Unknown'})`;
+        }
       }
     } catch (err: any) {
       logItem.success = false;
@@ -1328,9 +1354,12 @@ app.get('/api/admin/telegram/config', (req, res) => {
 
 app.post('/api/admin/telegram/config', (req, res) => {
   const { botToken, chatId, enabled, alertOnRegistration, alertOnKyc, alertOnOrder, alertOnDeposit } = req.body;
+  const cleanBotToken = botToken !== undefined ? String(botToken).trim().replace(/^bot/i, '') : telegramConfig.botToken;
+  const cleanChatId = chatId !== undefined ? String(chatId).trim() : telegramConfig.chatId;
+
   telegramConfig = {
-    botToken: botToken !== undefined ? botToken : telegramConfig.botToken,
-    chatId: chatId !== undefined ? chatId : telegramConfig.chatId,
+    botToken: cleanBotToken,
+    chatId: cleanChatId,
     enabled: enabled !== undefined ? enabled : telegramConfig.enabled,
     alertOnRegistration: alertOnRegistration !== undefined ? alertOnRegistration : telegramConfig.alertOnRegistration,
     alertOnKyc: alertOnKyc !== undefined ? alertOnKyc : telegramConfig.alertOnKyc,
@@ -1338,17 +1367,41 @@ app.post('/api/admin/telegram/config', (req, res) => {
     alertOnDeposit: alertOnDeposit !== undefined ? alertOnDeposit : telegramConfig.alertOnDeposit,
   };
   saveDatabase();
+  console.log(`[TELEGRAM CONFIG] Updated config: Token Present: ${!!cleanBotToken}, ChatId: ${cleanChatId}`);
   return res.json({ success: true, config: telegramConfig });
 });
 
 app.post('/api/admin/telegram/test', async (req, res) => {
+  const cleanBotToken = (telegramConfig.botToken || '').trim().replace(/^bot/i, '');
+  const cleanChatId = (telegramConfig.chatId || '').trim();
+
+  if (!cleanBotToken || !cleanChatId) {
+    return res.status(400).json({
+      success: false,
+      error: 'Bot Token এবং Chat ID বসানো হয়নি! অনুগ্রহ করে Bot Token এবং Chat ID দিয়ে "Save Webhook Settings" বাটনে চাপ দিন।',
+    });
+  }
+
   const log = await dispatchTelegramAlert(
     'test',
     `<b>🔔 TEST ALERT from Reseller.vaivaizone.com</b>\n` +
     `⚡ Connection verified: Telegram Bot Webhook is online!\n` +
     `🕒 Time: ${new Date().toLocaleString('en-US', { timeZone: 'Asia/Dhaka' })} (BST)`
   );
-  return res.json({ success: true, log });
+
+  if (!log.success) {
+    return res.status(400).json({
+      success: false,
+      error: `টেলিগ্রামে মেসেজ পাঠানো যায়নি। কারণ: ${log.message}`,
+      log,
+    });
+  }
+
+  return res.json({
+    success: true,
+    message: 'টেলিগ্রামে টেস্ট নোটিফিকেশন সফলভাবে পৌঁছেছে! আপনার টেলিগ্রাম চেক করুন।',
+    log,
+  });
 });
 
 app.get('/api/admin/telegram/logs', (req, res) => {
