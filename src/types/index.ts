@@ -162,6 +162,8 @@ export interface PaymentSettings {
   accounts: PaymentAccount[];
   notice: string;
   minDepositAmount: number;
+  supportWhatsapp?: string;
+  supportNotice?: string;
   updatedAt?: string;
 }
 

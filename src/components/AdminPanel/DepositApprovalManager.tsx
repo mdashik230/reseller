@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { DepositRequest } from '../../types';
 import { formatBDT, formatDate } from '../../utils/formatters';
 import { soundEffects } from '../../utils/audio';
+import { persistentStore, onStoreUpdate } from '../../utils/persistentStore';
 import {
   Wallet,
   CheckCircle2,
@@ -14,7 +15,8 @@ import {
   Check,
   Copy,
   Smartphone,
-  CreditCard
+  CreditCard,
+  RefreshCw
 } from 'lucide-react';
 
 interface DepositApprovalManagerProps {
@@ -33,13 +35,8 @@ export const DepositApprovalManager: React.FC<DepositApprovalManagerProps> = ({ 
   const fetchDeposits = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/admin/deposits');
-      if (res.ok) {
-        const data = await res.json();
-        if (data.deposits) {
-          setDeposits(data.deposits);
-        }
-      }
+      const data = await persistentStore.getDeposits();
+      setDeposits(data);
     } finally {
       setLoading(false);
     }
@@ -47,22 +44,26 @@ export const DepositApprovalManager: React.FC<DepositApprovalManagerProps> = ({ 
 
   useEffect(() => {
     fetchDeposits();
-    const interval = setInterval(fetchDeposits, 5000);
-    return () => clearInterval(interval);
+    // Poll every 4 seconds so admin immediately sees new reseller deposits live
+    const interval = setInterval(fetchDeposits, 4000);
+    const unsubscribe = onStoreUpdate(e => {
+      const customEvent = e as CustomEvent;
+      if (!customEvent.detail || customEvent.detail.type === 'deposits') {
+        fetchDeposits();
+      }
+    });
+    return () => {
+      clearInterval(interval);
+      unsubscribe();
+    };
   }, []);
 
   const handleReview = async (id: string, action: 'approve' | 'reject', reason?: string) => {
     try {
-      const res = await fetch(`/api/admin/deposits/${id}/review`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action, rejectionReason: reason }),
-      });
-      if (res.ok) {
-        soundEffects.playSuccessChime();
-        await fetchDeposits();
-        setRejectingDeposit(null);
-      }
+      await persistentStore.reviewDeposit(id, action, reason);
+      soundEffects.playSuccessChime();
+      await fetchDeposits();
+      setRejectingDeposit(null);
     } catch {
       soundEffects.playWarningChime();
     }
@@ -125,6 +126,16 @@ export const DepositApprovalManager: React.FC<DepositApprovalManagerProps> = ({ 
               <span>পেমেন্ট নাম্বার সেটিংস</span>
             </button>
           )}
+
+          <button
+            onClick={fetchDeposits}
+            disabled={loading}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 text-xs font-semibold transition-all shadow-sm disabled:opacity-60"
+            title="নতুন ডিপোজিট রিকোয়েস্ট রিফ্রেশ করুন"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-cyan-400' : ''}`} />
+            <span>রিফ্রেশ</span>
+          </button>
 
           <div className="relative">
             <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />

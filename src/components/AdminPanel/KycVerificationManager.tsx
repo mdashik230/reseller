@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { formatDate, getKycBadge } from '../../utils/formatters';
 import { soundEffects } from '../../utils/audio';
+import { persistentStore, onStoreUpdate } from '../../utils/persistentStore';
 import {
   ShieldCheck,
   CheckCircle2,
@@ -50,13 +51,8 @@ export const KycVerificationManager: React.FC = () => {
   const fetchKycList = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/admin/kyc/list');
-      if (res.ok) {
-        const data = await res.json();
-        if (data.kycList) {
-          setKycList(data.kycList);
-        }
-      }
+      const list = await persistentStore.getKycList();
+      setKycList(list);
     } finally {
       setLoading(false);
     }
@@ -64,21 +60,21 @@ export const KycVerificationManager: React.FC = () => {
 
   useEffect(() => {
     fetchKycList();
+    const unsubscribe = onStoreUpdate(e => {
+      const customEvent = e as CustomEvent;
+      if (!customEvent.detail || customEvent.detail.type === 'kyc') {
+        fetchKycList();
+      }
+    });
+    return unsubscribe;
   }, []);
 
   const handleReview = async (userId: string, action: 'approve' | 'reject', reason?: string) => {
     try {
-      const res = await fetch(`/api/admin/kyc/${userId}/review`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action, reason }),
-      });
-
-      if (res.ok) {
-        soundEffects.playSuccessChime();
-        await fetchKycList();
-        setRejectingUser(null);
-      }
+      await persistentStore.reviewKyc(userId, action, reason);
+      soundEffects.playSuccessChime();
+      await fetchKycList();
+      setRejectingUser(null);
     } catch {
       soundEffects.playWarningChime();
     }

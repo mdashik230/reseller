@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { PaymentAccount, PaymentSettings } from '../../types';
 import { soundEffects } from '../../utils/audio';
+import { persistentStore } from '../../utils/persistentStore';
 import {
   CreditCard,
   Smartphone,
@@ -15,7 +16,10 @@ import {
   RefreshCw,
   Eye,
   Sliders,
-  HelpCircle
+  HelpCircle,
+  MessageCircle,
+  PhoneCall,
+  ExternalLink
 } from 'lucide-react';
 
 export const PaymentSettingsManager: React.FC = () => {
@@ -41,13 +45,8 @@ export const PaymentSettingsManager: React.FC = () => {
   const fetchSettings = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/admin/payment-methods');
-      if (res.ok) {
-        const data = await res.json();
-        if (data.paymentSettings) {
-          setSettings(data.paymentSettings);
-        }
-      }
+      const data = await persistentStore.getPaymentSettings();
+      setSettings(data);
     } catch {
       setErrorMsg('পেমেন্ট সেটিংস লোড করা সম্ভব হয়নি');
     } finally {
@@ -97,23 +96,10 @@ export const PaymentSettingsManager: React.FC = () => {
     setErrorMsg(null);
     setSuccessMsg(null);
     try {
-      const res = await fetch('/api/admin/payment-methods', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(settings),
-      });
-
-      const data = await res.json();
-      if (res.ok) {
-        soundEffects.playSuccessChime();
-        setSuccessMsg(data.message || 'পেমেন্ট নাম্বার ও সেটিংস সফলভাবে সেভ হয়েছে!');
-        if (data.paymentSettings) {
-          setSettings(data.paymentSettings);
-        }
-        setTimeout(() => setSuccessMsg(null), 4000);
-      } else {
-        throw new Error(data.error || 'সেভ করতে সমস্যা হয়েছে');
-      }
+      await persistentStore.savePaymentSettings(settings);
+      soundEffects.playSuccessChime();
+      setSuccessMsg('পেমেন্ট নাম্বার ও সেটিংস সফলভাবে সেভ হয়েছে! রিসেলার পোর্টালে এই নাম্বারগুলো অবিলম্বে লাইভ হয়ে গেছে।');
+      setTimeout(() => setSuccessMsg(null), 5000);
     } catch (err: any) {
       setErrorMsg(err.message || 'সেটিংস সেভ করতে ব্যর্থ হয়েছে');
     } finally {
@@ -271,6 +257,79 @@ export const PaymentSettingsManager: React.FC = () => {
             />
             <p className="text-[11px] text-slate-500">
               রিসেলাররা এর চেয়ে কম এমাউন্ট সাবমিট করতে পারবে না।
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* 24/7 Official WhatsApp Helpline Number Settings */}
+      <div className="rounded-3xl bg-slate-900 border border-emerald-500/30 p-6 shadow-xl relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/5 blur-3xl pointer-events-none rounded-full" />
+
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 pb-3 border-b border-slate-800">
+          <div className="flex items-center gap-2.5">
+            <div className="w-10 h-10 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400 font-bold">
+              <MessageCircle className="w-5 h-5 fill-emerald-400/20" />
+            </div>
+            <div>
+              <h3 className="text-sm font-extrabold text-white flex items-center gap-2">
+                <span>২৪/৭ অফিশিয়াল হোয়াটসঅ্যাপ সাপোর্ট নাম্বার সেটিংস</span>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300">
+                  LIVE SUPPORT
+                </span>
+              </h3>
+              <p className="text-[11px] text-slate-400 mt-0.5">
+                রিসেলার সাইটের নিচে থাকা গোল WhatsApp বাটনে কোন নাম্বারে মেসেজ যাবে তা এখান থেকে পরিবর্তন করুন
+              </p>
+            </div>
+          </div>
+
+          {settings.supportWhatsapp && (
+            <a
+              href={`https://wa.me/${settings.supportWhatsapp.replace(/\D/g, '').startsWith('880') ? settings.supportWhatsapp.replace(/\D/g, '') : settings.supportWhatsapp.replace(/\D/g, '').startsWith('0') ? '88' + settings.supportWhatsapp.replace(/\D/g, '') : '880' + settings.supportWhatsapp.replace(/\D/g, '')}?text=Test%20from%20Admin`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 text-xs font-bold border border-emerald-500/40 transition-colors self-start sm:self-auto"
+            >
+              <ExternalLink className="w-3.5 h-3.5" />
+              <span>টেস্ট হোয়াটসঅ্যাপ চ্যাট</span>
+            </a>
+          )}
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+              <span>সাপোর্ট হোয়াটসঅ্যাপ ফোন নাম্বার (WhatsApp Number) *</span>
+            </label>
+            <div className="relative">
+              <PhoneCall className="w-4 h-4 text-emerald-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                value={settings.supportWhatsapp || ''}
+                onChange={e => setSettings(prev => ({ ...prev, supportWhatsapp: e.target.value }))}
+                placeholder="e.g. 01811223344 বা 8801811223344"
+                className="w-full pl-10 pr-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-xs font-mono font-bold text-emerald-400 focus:outline-none focus:border-emerald-500 transition-colors"
+              />
+            </div>
+            <p className="text-[11px] text-slate-500">
+              যেকোনো বাংলাদেশি মোবাইল নাম্বার (১১ ডিজিট) বা কান্ট্রি কোড সহ লিখুন। সেভ করার সাথে সাথে গোল বাটনে নাম্বারটি সেট হয়ে যাবে।
+            </p>
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-slate-300 block">
+              সাপোর্ট কার্ডের সাবটাইটেল / নোটিশ বার্তা:
+            </label>
+            <input
+              type="text"
+              value={settings.supportNotice || ''}
+              onChange={e => setSettings(prev => ({ ...prev, supportNotice: e.target.value }))}
+              placeholder="e.g. ২৪/৭ অফিসিয়াল হোয়াটসঅ্যাপ সাপোর্ট ডেস্ক"
+              className="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-xs text-white focus:outline-none focus:border-emerald-500 transition-colors"
+            />
+            <p className="text-[11px] text-slate-500">
+              রিসেলাররা গোল বাটনে ক্লিক করলে এই টাইটেলটি দেখতে পাবে।
             </p>
           </div>
         </div>

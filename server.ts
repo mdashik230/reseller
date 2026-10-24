@@ -236,6 +236,8 @@ let orders: Order[] = [];
 const defaultPaymentSettings: PaymentSettings = {
   minDepositAmount: 100,
   notice: 'টাকা পাঠানোর পর অবশ্যই সঠিক TrxID এবং সেন্ডার নাম্বার দিয়ে ডিপোজিট রিকোয়েস্ট সাবমিট করুন। এডমিন ভেরিফাই করে ৫-১৫ মিনিটের মধ্যে ব্যালেন্স যোগ করে দিবে।',
+  supportWhatsapp: '01811223344',
+  supportNotice: '২৪/৭ অফিসিয়াল হোয়াটসঅ্যাপ সাপোর্ট লাইভ আছে। যেকোনো প্রয়োজনে চ্যাট করুন।',
   accounts: [
     {
       id: 'bkash',
@@ -667,34 +669,78 @@ app.delete('/api/admin/services/:id', (req, res) => {
 
 // 4. MANUAL DEPOSIT SUBMISSION & ADMIN APPROVAL (NOT AUTOMATIC)
 app.post('/api/wallet/deposit-request', (req, res) => {
-  const { userId, amount, method, senderNumber, trxId, note } = req.body;
-  const numAmount = parseFloat(amount);
+  const targetUserId = req.body.userId || req.body.resellerId;
+  const rawSenderNumber = req.body.senderNumber;
+  const rawTrxId = req.body.trxId;
+  const rawAmount = req.body.amount;
+  const numAmount = parseFloat(rawAmount);
 
-  if (!userId || isNaN(numAmount) || numAmount <= 0 || !senderNumber || !trxId) {
+  if (isNaN(numAmount) || numAmount <= 0 || !rawSenderNumber || !rawTrxId) {
     return res.status(400).json({ error: 'Please provide valid Amount, Sender Number, and Transaction ID (TrxID).' });
   }
 
-  const user = users.find(u => u.id === userId);
+  const resellerEmail = (req.body.resellerEmail || req.body.email || '').trim();
+  const resellerName = (req.body.resellerName || req.body.name || (resellerEmail ? resellerEmail.split('@')[0] : 'Reseller')).trim();
+
+  let user = users.find(u => (targetUserId && u.id === targetUserId) || (resellerEmail && u.email.toLowerCase() === resellerEmail.toLowerCase()));
   if (!user) {
-    return res.status(404).json({ error: 'Reseller not found' });
+    user = {
+      id: targetUserId || `usr-reseller-${Date.now()}`,
+      name: resellerName,
+      email: resellerEmail || `reseller-${Date.now()}@vaivaizone.com`,
+      phone: String(rawSenderNumber).trim(),
+      role: 'reseller',
+      tier: 'General',
+      discountPercent: 5,
+      wallet: {
+        totalBalance: 0,
+        lockedSecurityDeposit: LOCKED_DEPOSIT,
+        usableBalance: 0,
+      },
+      kyc: {
+        status: 'pending',
+        phone: String(rawSenderNumber).trim(),
+        gmail: resellerEmail,
+        imoId: '',
+        screenshotUrl: '',
+      },
+      depositApproved: false,
+      isApprovedByAdmin: true,
+      status: 'active',
+      avatarUrl: `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(resellerName)}`,
+      createdAt: new Date().toISOString(),
+    };
+    users.push(user);
   }
 
+  const cleanTrxId = String(rawTrxId).trim().toUpperCase();
+  const cleanSenderNumber = String(rawSenderNumber).trim();
+  const cleanMethod = (req.body.method || 'bkash').toLowerCase();
+
   const newDepositReq: DepositRequest = {
-    id: `dep-${Date.now()}`,
+    id: req.body.id || `dep-${Date.now()}`,
     resellerId: user.id,
-    resellerName: user.name,
-    resellerEmail: user.email,
+    resellerName: resellerName || user.name,
+    resellerEmail: resellerEmail || user.email,
     amount: numAmount,
-    method: method || 'bkash',
-    senderNumber: senderNumber.trim(),
-    trxId: trxId.trim().toUpperCase(),
-    note: note || `Manual deposit of ৳${numAmount.toLocaleString()} via ${method?.toUpperCase() || 'bKash'}`,
+    method: cleanMethod as any,
+    senderNumber: cleanSenderNumber,
+    trxId: cleanTrxId,
+    note: req.body.note || `Manual deposit of ৳${numAmount.toLocaleString()} via ${cleanMethod.toUpperCase()} by ${user.name}`,
     status: 'pending', // NOT AUTOMATIC! Awaiting Admin Approval
-    createdAt: new Date().toISOString(),
+    createdAt: req.body.createdAt || new Date().toISOString(),
   };
 
-  depositRequests.unshift(newDepositReq);
+  // Check if same TrxID already pending
+  const existingIdx = depositRequests.findIndex(d => d.trxId.toUpperCase() === cleanTrxId);
+  if (existingIdx >= 0) {
+    depositRequests[existingIdx] = newDepositReq;
+  } else {
+    depositRequests.unshift(newDepositReq);
+  }
+
   saveDatabase();
+  console.log(`[DEPOSIT QUEUE] Saved deposit request: ${newDepositReq.id} - ${newDepositReq.amount} BDT - Trx: ${cleanTrxId} (Total in queue: ${depositRequests.length})`);
 
   // Dispatch Telegram Alert to Admin
   dispatchTelegramAlert(
@@ -702,9 +748,9 @@ app.post('/api/wallet/deposit-request', (req, res) => {
     `<b>💰 NEW DEPOSIT REQUEST (APPROVAL REQUIRED)!</b>\n` +
     `👤 <b>Reseller:</b> ${user.name}\n` +
     `💵 <b>Amount:</b> ৳${numAmount.toLocaleString()}\n` +
-    `💳 <b>Method:</b> ${method?.toUpperCase() || 'bKash'}\n` +
-    `📱 <b>Sender Number:</b> <code>${senderNumber}</code>\n` +
-    `🔖 <b>TrxID:</b> <code>${newDepositReq.trxId}</code>\n` +
+    `💳 <b>Method:</b> ${cleanMethod.toUpperCase()}\n` +
+    `📱 <b>Sender Number:</b> <code>${cleanSenderNumber}</code>\n` +
+    `🔖 <b>TrxID:</b> <code>${cleanTrxId}</code>\n` +
     `⏳ <i>Status: Awaiting Master Admin Verification & Approval</i>`
   );
 
@@ -712,6 +758,7 @@ app.post('/api/wallet/deposit-request', (req, res) => {
     success: true,
     message: 'Deposit request submitted successfully! Your balance will be credited after Master Admin verifies your TrxID.',
     depositRequest: newDepositReq,
+    deposits: depositRequests,
   });
 });
 
@@ -800,13 +847,15 @@ app.get('/api/wallet/transactions', (req, res) => {
 
 // ----------------- PAYMENT METHODS & NUMBERS CONFIGURATION ----------------- //
 
-// Public route for Resellers to get active payment numbers and deposit notice
+// Public route for Resellers to get active payment numbers, deposit notice, and support Whatsapp
 app.get('/api/payment-methods', (req, res) => {
   const enabledAccounts = paymentSettings.accounts.filter(a => a.enabled);
   return res.json({
     accounts: enabledAccounts,
     notice: paymentSettings.notice,
     minDepositAmount: paymentSettings.minDepositAmount,
+    supportWhatsapp: paymentSettings.supportWhatsapp || '01811223344',
+    supportNotice: paymentSettings.supportNotice || '২৪/৭ অফিসিয়াল হোয়াটসঅ্যাপ সাপোর্ট লাইভ আছে।',
     updatedAt: paymentSettings.updatedAt,
   });
 });
@@ -816,9 +865,9 @@ app.get('/api/admin/payment-methods', (req, res) => {
   return res.json({ paymentSettings });
 });
 
-// Admin route to update payment accounts and deposit notice
+// Admin route to update payment accounts, deposit notice, and support Whatsapp
 app.post('/api/admin/payment-methods', (req, res) => {
-  const { accounts, notice, minDepositAmount } = req.body;
+  const { accounts, notice, minDepositAmount, supportWhatsapp, supportNotice } = req.body;
   if (Array.isArray(accounts)) {
     paymentSettings.accounts = accounts;
   }
@@ -827,6 +876,12 @@ app.post('/api/admin/payment-methods', (req, res) => {
   }
   if (minDepositAmount !== undefined) {
     paymentSettings.minDepositAmount = parseFloat(minDepositAmount) || 100;
+  }
+  if (supportWhatsapp !== undefined) {
+    paymentSettings.supportWhatsapp = supportWhatsapp;
+  }
+  if (supportNotice !== undefined) {
+    paymentSettings.supportNotice = supportNotice;
   }
   paymentSettings.updatedAt = new Date().toISOString();
   saveDatabase();

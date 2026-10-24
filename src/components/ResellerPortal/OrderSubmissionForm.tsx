@@ -3,6 +3,7 @@ import { useAuth } from '../../context/AuthContext';
 import { ServiceItem, Order } from '../../types';
 import { formatBDT } from '../../utils/formatters';
 import { soundEffects } from '../../utils/audio';
+import { persistentStore, onStoreUpdate } from '../../utils/persistentStore';
 import { InstantGatewayModal } from './InstantGatewayModal';
 import {
   Zap,
@@ -45,16 +46,30 @@ export const OrderSubmissionForm: React.FC<OrderSubmissionFormProps> = ({ onOrde
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successOrder, setSuccessOrder] = useState<Order | null>(null);
 
+  const loadServices = async () => {
+    try {
+      const data = await persistentStore.getServices();
+      const visible = data.filter(s => !s.hidden);
+      if (visible && visible.length > 0) {
+        setServices(visible);
+        setSelectedService(prev => {
+          if (!prev) return visible[0];
+          const matched = visible.find(s => s.id === prev.id);
+          return matched || visible[0];
+        });
+      }
+    } catch {}
+  };
+
   useEffect(() => {
-    fetch('/api/services')
-      .then(res => res.json())
-      .then(data => {
-        if (data.services && data.services.length > 0) {
-          setServices(data.services);
-          setSelectedService(data.services[0]);
-        }
-      })
-      .catch(() => {});
+    loadServices();
+    const unsubscribe = onStoreUpdate(e => {
+      const customEvent = e as CustomEvent;
+      if (!customEvent.detail || customEvent.detail.type === 'services') {
+        loadServices();
+      }
+    });
+    return unsubscribe;
   }, []);
 
   const handleSelectService = (srv: ServiceItem) => {

@@ -3,6 +3,7 @@ import { useAuth } from '../../context/AuthContext';
 import { DepositRequest, PaymentAccount } from '../../types';
 import { formatBDT, formatDate } from '../../utils/formatters';
 import { soundEffects } from '../../utils/audio';
+import { persistentStore, onStoreUpdate } from '../../utils/persistentStore';
 import {
   X,
   PlusCircle,
@@ -15,7 +16,11 @@ import {
   Check,
   Clock,
   Smartphone,
-  CreditCard
+  CreditCard,
+  Sparkles,
+  MessageCircle,
+  ExternalLink,
+  ArrowRight
 } from 'lucide-react';
 
 const fallbackAccounts: PaymentAccount[] = [
@@ -33,6 +38,7 @@ export const WalletDepositModal: React.FC = () => {
   const [selectedAccountId, setSelectedAccountId] = useState<string>(fallbackAccounts[0].id);
   const [depositNotice, setDepositNotice] = useState<string>('');
   const [minDeposit, setMinDeposit] = useState<number>(100);
+  const [supportWhatsapp, setSupportWhatsapp] = useState<string>('01811223344');
 
   const [amount, setAmount] = useState('2000');
   const [senderNumber, setSenderNumber] = useState(currentUser?.phone || '01819283746');
@@ -41,27 +47,29 @@ export const WalletDepositModal: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [submittedSuccessData, setSubmittedSuccessData] = useState<DepositRequest | null>(null);
 
   // User's own deposit requests history
   const [myDeposits, setMyDeposits] = useState<DepositRequest[]>([]);
 
   const fetchPaymentMethods = async () => {
     try {
-      const res = await fetch('/api/payment-methods');
-      if (res.ok) {
-        const data = await res.json();
-        if (data.accounts && Array.isArray(data.accounts) && data.accounts.length > 0) {
-          setPaymentAccounts(data.accounts);
-          if (!data.accounts.some((a: PaymentAccount) => a.id === selectedAccountId)) {
-            setSelectedAccountId(data.accounts[0].id);
-          }
+      const data = await persistentStore.getPaymentSettings();
+      if (data.accounts && Array.isArray(data.accounts) && data.accounts.length > 0) {
+        setPaymentAccounts(data.accounts.filter(a => a.enabled));
+        if (!data.accounts.some((a: PaymentAccount) => a.id === selectedAccountId && a.enabled)) {
+          const firstEnabled = data.accounts.find(a => a.enabled) || data.accounts[0];
+          setSelectedAccountId(firstEnabled.id);
         }
-        if (data.notice) {
-          setDepositNotice(data.notice);
-        }
-        if (data.minDepositAmount) {
-          setMinDeposit(data.minDepositAmount);
-        }
+      }
+      if (data.notice) {
+        setDepositNotice(data.notice);
+      }
+      if (data.minDepositAmount) {
+        setMinDeposit(data.minDepositAmount);
+      }
+      if (data.supportWhatsapp) {
+        setSupportWhatsapp(data.supportWhatsapp);
       }
     } catch {
       // Use fallback accounts
@@ -71,11 +79,8 @@ export const WalletDepositModal: React.FC = () => {
   const fetchMyDeposits = async () => {
     if (!currentUser) return;
     try {
-      const res = await fetch(`/api/wallet/deposit-requests?userId=${currentUser.id}`);
-      if (res.ok) {
-        const data = await res.json();
-        if (data.deposits) setMyDeposits(data.deposits);
-      }
+      const all = await persistentStore.getDeposits();
+      setMyDeposits(all.filter(d => d.resellerId === currentUser.id));
     } catch {
       // Ignore
     }
@@ -83,9 +88,18 @@ export const WalletDepositModal: React.FC = () => {
 
   useEffect(() => {
     if (openDepositModal) {
+      setSubmittedSuccessData(null);
       fetchPaymentMethods();
       fetchMyDeposits();
     }
+    const unsubscribe = onStoreUpdate(e => {
+      const customEvent = e as CustomEvent;
+      if (!customEvent.detail || ['payments', 'deposits', 'wallet'].includes(customEvent.detail.type)) {
+        fetchPaymentMethods();
+        fetchMyDeposits();
+      }
+    });
+    return unsubscribe;
   }, [openDepositModal, currentUser?.id]);
 
   if (!openDepositModal || !currentUser) return null;
@@ -119,39 +133,21 @@ export const WalletDepositModal: React.FC = () => {
 
     setLoading(true);
     try {
-      const res = await fetch('/api/wallet/deposit-request', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId: currentUser.id,
-          amount: numAmount,
-          method: (selectedAccount?.name || 'bkash').toLowerCase(),
-          senderNumber: senderNumber.trim(),
-          trxId: trxId.trim(),
-          note: `Deposit of ৳${numAmount} via ${selectedAccount?.name} (${selectedAccount?.number}) by ${currentUser.name}`,
-        }),
+      const created = await persistentStore.submitDeposit({
+        resellerId: currentUser.id,
+        resellerName: currentUser.name,
+        resellerEmail: currentUser.email,
+        amount: numAmount,
+        method: (selectedAccount?.name || 'bkash').toLowerCase() as any,
+        senderNumber: senderNumber.trim(),
+        trxId: trxId.trim(),
+        note: `Deposit of ৳${numAmount} via ${selectedAccount?.name} (${selectedAccount?.number}) by ${currentUser.name}`,
       });
 
-      let data: any = null;
-      try {
-        const text = await res.text();
-        data = JSON.parse(text);
-      } catch {
-        // Response was not JSON (e.g. 404 from static host)
-      }
-
-      if (res.ok && data) {
-        soundEffects.playSuccessChime();
-        setSuccess('ডিপোজিট রিকোয়েস্ট সফলভাবে সাবমিট হয়েছে! মাস্টার এডমিন TrxID যাচাই করে অ্যাপ্রুভ করার সাথে সাথে আপনার ব্যালেন্স জমা হবে (ম্যানুয়াল ভেরিফিকেশন)।');
-        await fetchMyDeposits();
-        await refreshUser();
-      } else if (!res.ok && data && data.error) {
-        setError(data.error);
-      } else {
-        // Fallback for static hosts
-        soundEffects.playSuccessChime();
-        setSuccess('ডিপোজিট রিকোয়েস্ট গৃহীত হয়েছে! এডমিন স্টেটমেন্ট মিলিয়ে দ্রুত এপ্রুভ করবেন।');
-      }
+      soundEffects.playSuccessChime();
+      setSubmittedSuccessData(created);
+      await fetchMyDeposits();
+      await refreshUser();
     } catch {
       setError('ডিপোজিট রিকোয়েস্ট সাবমিট করার সময় নেটওয়ার্ক সমস্যা হয়েছে। অনুগ্রহ করে আবার চেষ্টা করুন।');
     } finally {
@@ -164,11 +160,145 @@ export const WalletDepositModal: React.FC = () => {
       <div className="relative w-full max-w-xl my-8 rounded-3xl bg-slate-900 border border-slate-800 shadow-2xl p-6 sm:p-7 text-white">
         
         <button
-          onClick={() => setOpenDepositModal(false)}
+          onClick={() => {
+            setSubmittedSuccessData(null);
+            setOpenDepositModal(false);
+          }}
           className="absolute top-5 right-5 p-2 rounded-xl bg-slate-800 text-slate-400 hover:text-white transition-colors"
         >
           <X className="w-5 h-5" />
         </button>
+
+        {submittedSuccessData ? (
+          <div className="py-2 space-y-5 animate-in fade-in zoom-in-95 duration-200">
+            {/* Header Badge & Title */}
+            <div className="text-center space-y-2">
+              <div className="relative inline-flex items-center justify-center">
+                <div className="w-16 h-16 rounded-full bg-emerald-500/20 border-2 border-emerald-400 flex items-center justify-center text-emerald-400 shadow-xl shadow-emerald-500/30 animate-pulse">
+                  <CheckCircle className="w-9 h-9" />
+                </div>
+                <div className="absolute -top-1 -right-1 w-6 h-6 rounded-full bg-amber-400 text-slate-950 flex items-center justify-center shadow">
+                  <Sparkles className="w-3.5 h-3.5" />
+                </div>
+              </div>
+
+              <div>
+                <h4 className="text-xl font-bold text-white">
+                  ডিপোজিট রিকোয়েস্ট সফলভাবে জমা হয়েছে! 🎉
+                </h4>
+                <p className="text-xs text-slate-300 max-w-md mx-auto mt-1">
+                  আপনার জমাটি রিসিভ করা হয়েছে। মাস্টার এডমিন স্টেটমেন্টের সাথে TrxID মিলিয়ে খুব দ্রুত ওয়ালেটে ব্যালেন্স অ্যাড করে দেবেন।
+                </p>
+              </div>
+            </div>
+
+            {/* Receipt Summary Card */}
+            <div className="p-4 rounded-2xl bg-slate-950/80 border border-slate-800 shadow-inner space-y-3">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-800/80">
+                <span className="text-xs text-slate-400">ডিপোজিট পরিমাণ</span>
+                <span className="text-xl font-black text-emerald-400 font-mono">
+                  {formatBDT(submittedSuccessData.amount)}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 text-xs">
+                <div className="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800">
+                  <span className="text-[11px] text-slate-400 block mb-0.5">পেমেন্ট মাধ্যম</span>
+                  <span className="font-bold text-white flex items-center gap-1.5 uppercase">
+                    <CreditCard className="w-3.5 h-3.5 text-cyan-400" />
+                    {submittedSuccessData.method}
+                  </span>
+                </div>
+
+                <div className="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800">
+                  <span className="text-[11px] text-slate-400 block mb-0.5">সেন্ডার নম্বর</span>
+                  <span className="font-mono font-bold text-slate-200 flex items-center gap-1.5">
+                    <Smartphone className="w-3.5 h-3.5 text-amber-400" />
+                    {submittedSuccessData.senderNumber}
+                  </span>
+                </div>
+
+                <div className="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800 col-span-2 flex items-center justify-between">
+                  <div>
+                    <span className="text-[11px] text-slate-400 block mb-0.5">ট্রানজেকশন আইডি (TrxID)</span>
+                    <span className="font-mono font-bold text-emerald-300 text-sm">
+                      {submittedSuccessData.trxId}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard.writeText(submittedSuccessData.trxId);
+                      setCopied(true);
+                      setTimeout(() => setCopied(false), 2000);
+                    }}
+                    className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px] font-semibold flex items-center gap-1 transition-colors"
+                  >
+                    {copied ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                    <span>{copied ? 'কপি হয়েছে' : 'কপি TrxID'}</span>
+                  </button>
+                </div>
+              </div>
+
+              <div className="pt-2 flex items-center justify-between text-[11px] text-slate-400">
+                <span className="flex items-center gap-1 text-amber-300">
+                  <Clock className="w-3.5 h-3.5" />
+                  স্ট্যাটাস: পেন্ডিং রিভিউ (৫-১৫ মিনিট)
+                </span>
+                <span>{new Date(submittedSuccessData.createdAt).toLocaleTimeString('bn-BD')}</span>
+              </div>
+            </div>
+
+            {/* Reassurance Notice */}
+            <div className="p-3 rounded-xl bg-emerald-950/20 border border-emerald-500/20 text-xs text-emerald-200/90 flex items-start gap-2.5 leading-relaxed">
+              <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+              <span>
+                সতর্কতা: সিকিউরিটির স্বার্থে অটো-অ্যাড বন্ধ রাখা হয়েছে। এডমিন ভেরিফাই করে কনফার্ম করলেই স্বয়ংক্রিয়ভাবে নোটিফিকেশন পাবেন ও ওয়ালেটে টাকা যোগ হবে।
+              </span>
+            </div>
+
+            {/* Quick Action Buttons */}
+            <div className="space-y-2 pt-1">
+              <a
+                href={`https://wa.me/${supportWhatsapp.replace(/[^0-9]/g, '').startsWith('88') ? supportWhatsapp.replace(/[^0-9]/g, '') : '88' + supportWhatsapp.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(`আসসালামু আলাইকুম, আমি VaiVaiZone Reseller Portal এ একটি ডিপোজিট রিকোয়েস্ট করেছি।\n\n📌 TrxID: ${submittedSuccessData.trxId}\n💰 পরিমাণ: ${submittedSuccessData.amount} টাকা\n💳 মাধ্যম: ${submittedSuccessData.method.toUpperCase()}\n📱 সেন্ডার: ${submittedSuccessData.senderNumber}\n\nঅনুগ্রহ করে চেক করে ওয়ালেটে ব্যালেন্স এপ্রুভ করুন। ধন্যবাদ!`)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full py-3 px-4 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/30 transition-all hover:scale-[1.01]"
+              >
+                <MessageCircle className="w-4 h-4" />
+                <span>এডমিনকে দ্রুত এপ্রুভালের জন্য WhatsApp-এ জানান (Notify WhatsApp)</span>
+                <ExternalLink className="w-3.5 h-3.5 ml-0.5 opacity-70" />
+              </a>
+
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSubmittedSuccessData(null);
+                    setSuccess(null);
+                    setTrxId(`${selectedAccount?.name.slice(0, 3).toUpperCase() || 'TRX'}${Date.now().toString().slice(-6)}`);
+                  }}
+                  className="py-2.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs border border-slate-700 transition-colors"
+                >
+                  আরেকটি ডিপোজিট করুন
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSubmittedSuccessData(null);
+                    setSuccess(null);
+                    setOpenDepositModal(false);
+                  }}
+                  className="py-2.5 px-3 rounded-xl bg-slate-700 hover:bg-slate-600 text-white font-semibold text-xs flex items-center justify-center gap-1.5 transition-colors"
+                >
+                  <span>ড্যাশবোর্ডে ফিরুন</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <>
 
         <div className="flex items-center gap-3 mb-4">
           <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
@@ -332,6 +462,8 @@ export const WalletDepositModal: React.FC = () => {
             {loading ? 'Submitting Request...' : `Submit Deposit Request (${formatBDT(numAmount)})`}
           </button>
         </form>
+        </>
+      )}
 
         {/* Reseller's Recent Deposit Requests Status */}
         {myDeposits.length > 0 && (

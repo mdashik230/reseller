@@ -4,6 +4,7 @@ import { Header } from './components/Header';
 import { ResellerDashboard } from './components/ResellerPortal/ResellerDashboard';
 import { AdminDashboard } from './components/AdminPanel/AdminDashboard';
 import { LoginPage } from './components/Auth/LoginPage';
+import { WhatsAppSupportButton } from './components/WhatsAppSupportButton';
 import {
   ShieldCheck,
   Lock,
@@ -15,7 +16,12 @@ const MainLayout: React.FC = () => {
 
   // If user is not authenticated with Google, show the dedicated Login Page
   if (!isAuthenticated) {
-    return <LoginPage />;
+    return (
+      <>
+        <LoginPage />
+        <WhatsAppSupportButton />
+      </>
+    );
   }
 
   const isMasterAdmin = currentUser?.role === 'admin' && isMasterAdminEmail(currentUser?.email);
@@ -30,6 +36,9 @@ const MainLayout: React.FC = () => {
       <main className="flex-1 pb-16">
         {isMasterAdmin ? <AdminDashboard /> : <ResellerDashboard />}
       </main>
+
+      {/* Floating 24/7 WhatsApp Support Button */}
+      <WhatsAppSupportButton />
 
       {/* Professional Fintech Footer */}
       <footer className="border-t border-slate-800/80 bg-slate-900/40 text-slate-400 py-8 text-xs">

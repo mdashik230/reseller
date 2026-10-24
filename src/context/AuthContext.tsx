@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { User, WalletState } from '../types';
 import { soundEffects } from '../utils/audio';
+import { onStoreUpdate } from '../utils/persistentStore';
 import { auth } from '../firebase';
 import { signOut } from 'firebase/auth';
 
@@ -213,9 +214,28 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  // Fetch / refresh user profile from backend
+  // Fetch / refresh user profile with dual local and remote sync
   const refreshUser = useCallback(async () => {
     if (!currentUser?.id) return;
+
+    // 1. Check local storage first
+    if (typeof window !== 'undefined') {
+      try {
+        const raw = localStorage.getItem('vaivai_reseller_user_v2');
+        if (raw) {
+          const localUser = JSON.parse(raw);
+          if (localUser && localUser.id === currentUser.id) {
+            const isMasterAdmin = isMasterAdminEmail(localUser.email);
+            setCurrentUser({
+              ...localUser,
+              role: isMasterAdmin ? 'admin' : 'reseller',
+            });
+          }
+        }
+      } catch {}
+    }
+
+    // 2. Sync with backend API if reachable
     try {
       const res = await fetch('/api/auth/me', {
         headers: { 'x-user-id': currentUser.id },
@@ -230,6 +250,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             role: isMasterAdmin ? 'admin' : 'reseller',
           };
           setCurrentUser(verifiedUser);
+          if (typeof window !== 'undefined') {
+            localStorage.setItem('vaivai_reseller_user_v2', JSON.stringify(verifiedUser));
+          }
         }
       }
     } catch {
@@ -241,6 +264,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (currentUser?.id) {
       refreshUser();
     }
+    const unsubscribe = onStoreUpdate(e => {
+      const customEvent = e as CustomEvent;
+      if (!customEvent.detail || ['kyc', 'deposits', 'wallet'].includes(customEvent.detail.type)) {
+        refreshUser();
+      }
+    });
+    return unsubscribe;
   }, [currentUser?.id, refreshUser]);
 
   const switchUser = (user: User) => {

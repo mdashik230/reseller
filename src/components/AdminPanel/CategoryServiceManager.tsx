@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { ServiceItem } from '../../types';
 import { formatBDT } from '../../utils/formatters';
 import { soundEffects } from '../../utils/audio';
+import { persistentStore, onStoreUpdate } from '../../utils/persistentStore';
 import {
   Layers,
   Plus,
@@ -52,23 +53,17 @@ export const CategoryServiceManager: React.FC = () => {
   const fetchServices = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/services?all=true');
-      if (res.ok) {
-        const data = await res.json();
-        if (data.services) {
-          setServices(data.services);
-          // populate rate edits
-          const initialEdits: Record<string, { customerRate: number; resellerRate: number; unitName: string }> = {};
-          data.services.forEach((s: ServiceItem) => {
-            initialEdits[s.id] = {
-              customerRate: s.customerRatePer1000 || 2250,
-              resellerRate: s.resellerRatePer1000 || 2180,
-              unitName: s.unitName || 'Diamonds 💎',
-            };
-          });
-          setRateEdits(initialEdits);
-        }
-      }
+      const data = await persistentStore.getServices();
+      setServices(data);
+      const initialEdits: Record<string, { customerRate: number; resellerRate: number; unitName: string }> = {};
+      data.forEach((s: ServiceItem) => {
+        initialEdits[s.id] = {
+          customerRate: s.customerRatePer1000 || 2250,
+          resellerRate: s.resellerRatePer1000 || 2180,
+          unitName: s.unitName || 'Diamonds 💎',
+        };
+      });
+      setRateEdits(initialEdits);
     } finally {
       setLoading(false);
     }
@@ -76,6 +71,13 @@ export const CategoryServiceManager: React.FC = () => {
 
   useEffect(() => {
     fetchServices();
+    const unsubscribe = onStoreUpdate(e => {
+      const customEvent = e as CustomEvent;
+      if (!customEvent.detail || customEvent.detail.type === 'services') {
+        fetchServices();
+      }
+    });
+    return unsubscribe;
   }, []);
 
   const handleRateChange = (serviceId: string, field: 'customerRate' | 'resellerRate' | 'unitName', value: any) => {
@@ -100,18 +102,11 @@ export const CategoryServiceManager: React.FC = () => {
     }));
 
     try {
-      const res = await fetch('/api/admin/services/batch-rates', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ rates: ratesPayload }),
-      });
-
-      if (res.ok) {
-        soundEffects.playSuccessChime();
-        setBatchSuccessMsg('সকল ক্যাটাগরির ১০০০-ইউনিটের রেট সফলভাবে আপডেট হয়েছে! সমস্ত ভেরিফাইড রিসেলারদের একাউন্টে এই নতুন রেট অনুযায়ী ব্যালেন্স মাইনাস হবে।');
-        await fetchServices();
-        setTimeout(() => setBatchSuccessMsg(null), 6000);
-      }
+      await persistentStore.updateRatesBatch(ratesPayload);
+      soundEffects.playSuccessChime();
+      setBatchSuccessMsg('সকল ক্যাটাগরির ১০০০-ইউনিটের রেট সফলভাবে সেভ হয়েছে! সমস্ত ভেরিফাইড রিসেলারদের একাউন্টে এই নতুন রেট সাথে সাথে কার্যকর হয়ে গেছে।');
+      await fetchServices();
+      setTimeout(() => setBatchSuccessMsg(null), 6000);
     } catch {
       soundEffects.playWarningChime();
     } finally {
@@ -153,13 +148,12 @@ export const CategoryServiceManager: React.FC = () => {
 
   const handleToggleHide = async (srv: ServiceItem) => {
     try {
-      const res = await fetch(`/api/admin/services/${srv.id}/visibility`, {
-        method: 'PATCH',
-      });
-      if (res.ok) {
-        soundEffects.playSuccessChime();
-        await fetchServices();
-      }
+      const updated = services.map(s => s.id === srv.id ? { ...s, hidden: !s.hidden } : s);
+      await persistentStore.saveServices(updated);
+      soundEffects.playSuccessChime();
+      await fetchServices();
+
+      fetch(`/api/admin/services/${srv.id}/visibility`, { method: 'PATCH' }).catch(() => {});
     } catch {
       soundEffects.playWarningChime();
     }
@@ -169,13 +163,12 @@ export const CategoryServiceManager: React.FC = () => {
     if (!window.confirm(`Are you sure you want to delete category "${srv.name}"?`)) return;
 
     try {
-      const res = await fetch(`/api/admin/services/${srv.id}`, {
-        method: 'DELETE',
-      });
-      if (res.ok) {
-        soundEffects.playSuccessChime();
-        await fetchServices();
-      }
+      const updated = services.filter(s => s.id !== srv.id);
+      await persistentStore.saveServices(updated);
+      soundEffects.playSuccessChime();
+      await fetchServices();
+
+      fetch(`/api/admin/services/${srv.id}`, { method: 'DELETE' }).catch(() => {});
     } catch {
       soundEffects.playWarningChime();
     }
@@ -185,7 +178,7 @@ export const CategoryServiceManager: React.FC = () => {
     e.preventDefault();
     if (!name.trim()) return;
 
-    const payload = {
+    const payload: Partial<ServiceItem> = {
       name,
       category,
       icon,
@@ -201,27 +194,44 @@ export const CategoryServiceManager: React.FC = () => {
 
     try {
       if (modalMode === 'create') {
-        const res = await fetch('/api/admin/services', {
+        const newSrv: ServiceItem = {
+          id: `srv-${Date.now()}`,
+          name: payload.name!,
+          category: payload.category as any,
+          icon: payload.icon || '💎',
+          description: payload.description || '',
+          inputType: payload.inputType as any,
+          inputLabel: payload.inputLabel || 'Recipient ID',
+          inputPlaceholder: payload.inputPlaceholder || '',
+          unitName: payload.unitName || 'Units',
+          customerRatePer1000: payload.customerRatePer1000 || 2250,
+          resellerRatePer1000: payload.resellerRatePer1000 || 2180,
+          minQuantity: payload.minQuantity || 50,
+          hidden: false,
+        };
+        const updated = [...services, newSrv];
+        await persistentStore.saveServices(updated);
+        soundEffects.playSuccessChime();
+        await fetchServices();
+        setModalMode(null);
+
+        fetch('/api/admin/services', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
-        });
-        if (res.ok) {
-          soundEffects.playSuccessChime();
-          await fetchServices();
-          setModalMode(null);
-        }
+        }).catch(() => {});
       } else if (modalMode === 'edit' && editingService) {
-        const res = await fetch(`/api/admin/services/${editingService.id}`, {
+        const updated = services.map(s => s.id === editingService.id ? { ...s, ...payload } : s);
+        await persistentStore.saveServices(updated);
+        soundEffects.playSuccessChime();
+        await fetchServices();
+        setModalMode(null);
+
+        fetch(`/api/admin/services/${editingService.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
-        });
-        if (res.ok) {
-          soundEffects.playSuccessChime();
-          await fetchServices();
-          setModalMode(null);
-        }
+        }).catch(() => {});
       }
     } catch {
       soundEffects.playWarningChime();

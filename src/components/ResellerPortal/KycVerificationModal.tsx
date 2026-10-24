@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { soundEffects } from '../../utils/audio';
+import { persistentStore } from '../../utils/persistentStore';
 import {
   X,
   Upload,
@@ -58,37 +59,27 @@ export const KycVerificationModal: React.FC = () => {
     setSuccessMsg(null);
 
     if (!phone.trim() || !gmail.trim() || !imoId.trim() || !screenshotUrl) {
-      setError('Please provide your Phone, Valid Gmail, IMO ID, and upload an IMO Profile Screenshot.');
+      setError('অনুগ্রহ করে ফোন নাম্বার, জিমেইল, ইমো আইডি এবং প্রোফাইল স্ক্রিনশট আপলোড করুন।');
       return;
     }
 
     setLoading(true);
     try {
-      const res = await fetch('/api/kyc/submit', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId: currentUser.id,
-          phone,
-          gmail,
-          imoId,
-          screenshotUrl,
-        }),
+      const result = await persistentStore.submitKyc(currentUser.id, {
+        phone: phone.trim(),
+        gmail: gmail.trim(),
+        imoId: imoId.trim(),
+        screenshotUrl,
       });
 
-      const data = await res.json();
-      if (!res.ok) {
-        setError(data.error || 'Failed to submit KYC verification');
-      } else {
-        soundEffects.playSuccessChime();
-        setSuccessMsg(data.message || 'KYC submitted successfully!');
-        await refreshUser();
-        setTimeout(() => {
-          setOpenKycModal(false);
-        }, 1600);
-      }
+      soundEffects.playSuccessChime();
+      setSuccessMsg(result.message || 'KYC সাবমিট সফল হয়েছে! মাস্টার এডমিন TrxID ও IMO ID যাচাই করে অ্যাপ্রুভ করবেন।');
+      await refreshUser();
+      setTimeout(() => {
+        setOpenKycModal(false);
+      }, 1500);
     } catch {
-      setError('Network connection error while submitting KYC');
+      setError('সাবমিট করতে সমস্যা হয়েছে। অনুগ্রহ করে আবার চেষ্টা করুন।');
     } finally {
       setLoading(false);
     }

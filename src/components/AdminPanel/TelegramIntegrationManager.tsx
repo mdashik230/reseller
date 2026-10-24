@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { TelegramConfig, TelegramLog } from '../../types';
 import { formatDate } from '../../utils/formatters';
 import { soundEffects } from '../../utils/audio';
+import { persistentStore } from '../../utils/persistentStore';
 import {
   Send,
   Bot,
@@ -31,14 +32,9 @@ export const TelegramIntegrationManager: React.FC = () => {
 
   const fetchConfigAndLogs = async () => {
     try {
-      const [resConfig, resLogs] = await Promise.all([
-        fetch('/api/admin/telegram/config'),
-        fetch('/api/admin/telegram/logs'),
-      ]);
-      if (resConfig.ok) {
-        const data = await resConfig.json();
-        if (data.config) setConfig(data.config);
-      }
+      const cfg = await persistentStore.getTelegramConfig();
+      setConfig(cfg);
+      const resLogs = await fetch('/api/admin/telegram/logs');
       if (resLogs.ok) {
         const data = await resLogs.json();
         if (data.logs) setLogs(data.logs);
@@ -50,8 +46,6 @@ export const TelegramIntegrationManager: React.FC = () => {
 
   useEffect(() => {
     fetchConfigAndLogs();
-    const interval = setInterval(fetchConfigAndLogs, 5000);
-    return () => clearInterval(interval);
   }, []);
 
   const handleSaveConfig = async (e: React.FormEvent) => {
@@ -59,15 +53,10 @@ export const TelegramIntegrationManager: React.FC = () => {
     setSaving(true);
     setMessage(null);
     try {
-      const res = await fetch('/api/admin/telegram/config', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(config),
-      });
-      if (res.ok) {
-        soundEffects.playSuccessChime();
-        setMessage('Telegram Bot configuration saved successfully!');
-      }
+      await persistentStore.saveTelegramConfig(config);
+      soundEffects.playSuccessChime();
+      setMessage('Telegram Bot configuration saved successfully!');
+      setTimeout(() => setMessage(null), 4000);
     } catch {
       setMessage('Failed to save settings.');
     } finally {

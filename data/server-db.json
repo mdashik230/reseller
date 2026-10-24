@@ -50,9 +50,35 @@
       },
       "depositApproved": false,
       "isApprovedByAdmin": false,
-      "status": "active",
+      "status": "suspended",
       "avatarUrl": "https://api.dicebear.com/7.x/bottts/svg?seed=testuser%40gmail.com",
       "createdAt": "2026-10-23T14:01:57.138Z"
+    },
+    {
+      "id": "usr-reseller-test",
+      "name": "Test Reseller",
+      "email": "test@reseller.com",
+      "phone": "01711223344",
+      "role": "reseller",
+      "tier": "General",
+      "discountPercent": 5,
+      "wallet": {
+        "totalBalance": 2000,
+        "lockedSecurityDeposit": 2000,
+        "usableBalance": 0
+      },
+      "kyc": {
+        "status": "pending",
+        "phone": "01711223344",
+        "gmail": "test@reseller.com",
+        "imoId": "",
+        "screenshotUrl": ""
+      },
+      "depositApproved": true,
+      "isApprovedByAdmin": true,
+      "status": "active",
+      "avatarUrl": "https://api.dicebear.com/7.x/bottts/svg?seed=Test%20Reseller",
+      "createdAt": "2026-10-24T11:18:11.884Z"
     }
   ],
   "services": [
@@ -147,8 +173,37 @@
       "hidden": false
     }
   ],
-  "depositRequests": [],
-  "transactions": [],
+  "depositRequests": [
+    {
+      "id": "dep-1792840691884",
+      "resellerId": "usr-reseller-test",
+      "resellerName": "Test Reseller",
+      "resellerEmail": "test@reseller.com",
+      "amount": 2000,
+      "method": "bkash",
+      "senderNumber": "01711223344",
+      "trxId": "BKS998877TEST",
+      "note": "Test deposit",
+      "status": "approved",
+      "createdAt": "2026-10-24T11:18:11.884Z",
+      "reviewedAt": "2026-10-24T11:18:29.225Z"
+    }
+  ],
+  "transactions": [
+    {
+      "id": "tx-1792840709225",
+      "resellerId": "usr-reseller-test",
+      "resellerName": "Test Reseller",
+      "type": "deposit",
+      "amount": 2000,
+      "previousBalance": 0,
+      "newBalance": 2000,
+      "method": "bkash",
+      "trxId": "BKS998877TEST",
+      "note": "Approved deposit via BKASH (Trx: BKS998877TEST)",
+      "timestamp": "2026-10-24T11:18:29.225Z"
+    }
+  ],
   "orders": [],
   "telegramConfig": {
     "botToken": "",
@@ -160,6 +215,30 @@
     "alertOnDeposit": true
   },
   "telegramLogs": [
+    {
+      "id": "tg-1792840709225-vgcqg",
+      "event": "deposit",
+      "message": "<b>✅ DEPOSIT APPROVED & CREDITED!</b>\n👤 <b>Reseller:</b> Test Reseller\n💵 <b>Amount Credited:</b> ৳2,000\n📊 <b>New Total:</b> ৳2,000 (Usable: ৳0)",
+      "timestamp": "2026-10-24T11:18:29.225Z",
+      "success": true,
+      "simulated": true
+    },
+    {
+      "id": "tg-1792840691893-yd814",
+      "event": "deposit",
+      "message": "<b>💰 NEW DEPOSIT REQUEST (APPROVAL REQUIRED)!</b>\n👤 <b>Reseller:</b> Test Reseller\n💵 <b>Amount:</b> ৳2,000\n💳 <b>Method:</b> BKASH\n📱 <b>Sender Number:</b> <code>01711223344</code>\n🔖 <b>TrxID:</b> <code>BKS998877TEST</code>\n⏳ <i>Status: Awaiting Master Admin Verification & Approval</i>",
+      "timestamp": "2026-10-24T11:18:11.893Z",
+      "success": true,
+      "simulated": true
+    },
+    {
+      "id": "tg-1792838709537-l8i2u",
+      "event": "test",
+      "message": "<b>⚙️ PAYMENT METHODS UPDATED!</b>\n💳 <b>Active Accounts:</b> bKash: 01799887766, Nagad: 01811223344, Rocket: 01922334455-8, Bank Transfer: Bank Asia A/C: 088192847192 (VaiVaiZone Tech)\n🕒 <i>Updated by Master Admin</i>",
+      "timestamp": "2026-10-24T10:45:09.537Z",
+      "success": true,
+      "simulated": true
+    },
     {
       "id": "tg-1792764117139-l96l3",
       "event": "registration",
@@ -218,7 +297,9 @@
         "minDeposit": 500
       }
     ],
-    "updatedAt": "2026-10-23T12:02:20.540Z"
+    "updatedAt": "2026-10-24T10:45:15.773Z",
+    "supportWhatsapp": "01811223344",
+    "supportNotice": "২৪/৭ অফিসিয়াল হোয়াটসঅ্যাপ সাপোর্ট লাইভ আছে। যেকোনো প্রয়োজনে চ্যাট করুন।"
   },
-  "savedAt": "2026-10-23T14:01:57.139Z"
+  "savedAt": "2026-10-24T11:18:29.225Z"
 }
