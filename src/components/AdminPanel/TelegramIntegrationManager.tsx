@@ -19,7 +19,9 @@ import {
   Check,
   Copy,
   RefreshCw,
-  Info
+  Info,
+  Search,
+  CheckCheck
 } from 'lucide-react';
 
 export const TelegramIntegrationManager: React.FC = () => {
@@ -35,11 +37,12 @@ export const TelegramIntegrationManager: React.FC = () => {
   const [logs, setLogs] = useState<TelegramLog[]>([]);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
+  const [verifyingToken, setVerifyingToken] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [verifiedBotInfo, setVerifiedBotInfo] = useState<{ name: string; username: string } | null>(null);
   const [showGuide, setShowGuide] = useState(false);
-  const [copiedText, setCopiedText] = useState<string | null>(null);
 
   const fetchConfigAndLogs = async () => {
     try {
@@ -47,8 +50,11 @@ export const TelegramIntegrationManager: React.FC = () => {
       setConfig(cfg);
       const resLogs = await fetch('/api/admin/telegram/logs');
       if (resLogs.ok) {
-        const data = await resLogs.json();
-        if (data.logs) setLogs(data.logs);
+        const text = await resLogs.text();
+        if (text) {
+          const data = JSON.parse(text);
+          if (data && data.logs) setLogs(data.logs);
+        }
       }
     } catch {
       // Ignore
@@ -59,10 +65,41 @@ export const TelegramIntegrationManager: React.FC = () => {
     fetchConfigAndLogs();
   }, []);
 
-  const handleCopy = (text: string) => {
-    navigator.clipboard.writeText(text);
-    setCopiedText(text);
-    setTimeout(() => setCopiedText(null), 2000);
+  const handleVerifyToken = async () => {
+    const cleanToken = config.botToken.trim().replace(/^bot/i, '');
+    if (!cleanToken) {
+      setErrorMessage('প্রথমে Telegram Bot Token টি পেস্ট করুন!');
+      return;
+    }
+    setVerifyingToken(true);
+    setErrorMessage(null);
+    setSuccessMessage(null);
+    setVerifiedBotInfo(null);
+
+    try {
+      const res = await fetch(`https://api.telegram.org/bot${cleanToken}/getMe`);
+      const data = await res.json();
+      if (data.ok) {
+        soundEffects.playSuccessChime();
+        setVerifiedBotInfo({
+          name: data.result?.first_name || 'Bot',
+          username: data.result?.username || '',
+        });
+        setSuccessMessage(`✅ টোকেন ১০০% সঠিক! বট নাম: "${data.result?.first_name}" (@${data.result?.username})`);
+      } else {
+        soundEffects.playWarningChime();
+        if (data.error_code === 401) {
+          setErrorMessage('❌ টোকেন ভুল (401 Unauthorized)! আপনার দেওয়া Bot Token টি কাজ করছে না। অনুগ্রহ করে টেলিগ্রাম @BotFather থেকে সম্পূর্ণ টোকেনটি নতুন করে কপি করে বসান।');
+        } else {
+          setErrorMessage(`❌ Telegram Error: ${data.description || 'Token Invalid'}`);
+        }
+      }
+    } catch (err: any) {
+      soundEffects.playWarningChime();
+      setErrorMessage(`টেলিগ্রাম এপিআই যাচাই করতে সমস্যা: ${err.message}`);
+    } finally {
+      setVerifyingToken(false);
+    }
   };
 
   const handleSaveConfig = async (e: React.FormEvent) => {
@@ -100,22 +137,82 @@ export const TelegramIntegrationManager: React.FC = () => {
     setSuccessMessage(null);
     setErrorMessage(null);
 
+    const cleanToken = config.botToken.trim().replace(/^bot/i, '');
+    const cleanChat = config.chatId.trim();
+
+    if (!cleanToken || !cleanChat) {
+      setErrorMessage('Bot Token এবং Chat ID উভয়ই বক্সে লিখে "Save Telegram Webhook Settings" করুন!');
+      setTesting(false);
+      return;
+    }
+
     try {
-      const res = await fetch('/api/admin/telegram/test', {
-        method: 'POST',
+      // Step 1: Verify token with official Telegram getMe endpoint directly
+      const getMeRes = await fetch(`https://api.telegram.org/bot${cleanToken}/getMe`);
+      const getMeData = await getMeRes.json();
+      if (!getMeData.ok) {
+        soundEffects.playWarningChime();
+        if (getMeData.error_code === 401) {
+          setErrorMessage('❌ আপনার দেওয়া Bot Token টি ভুল বা ইনভ্যালিড (401 Unauthorized)! অনুগ্রহ করে @BotFather চ্যাট থেকে সম্পূর্ণ ও সঠিক Token কপি করে পেস্ট করুন।');
+        } else {
+          setErrorMessage(`❌ Telegram API Error: ${getMeData.description || 'Invalid Bot Token'}`);
+        }
+        setTesting(false);
+        return;
+      }
+
+      const botUsername = getMeData.result?.username || 'VaiVaiZone_Bot';
+      setVerifiedBotInfo({
+        name: getMeData.result?.first_name || 'Bot',
+        username: botUsername,
       });
-      const data = await res.json();
-      if (res.ok && data.success) {
+
+      // Step 2: Send test ping directly to target Telegram chat / group
+      const testMsg = `<b>🔔 LIVE TEST PING from Reseller.vaivaizone.com</b>\n\n🤖 <b>Bot Name:</b> @${botUsername}\n💬 <b>Target Chat ID:</b> <code>${cleanChat}</code>\n✅ Telegram Webhook Connection Live & Verified!\n🕒 Time: ${new Date().toLocaleString('en-US', { timeZone: 'Asia/Dhaka' })} (BST)`;
+
+      const sendRes = await fetch(`https://api.telegram.org/bot${cleanToken}/sendMessage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: cleanChat,
+          text: testMsg,
+          parse_mode: 'HTML',
+        }),
+      });
+
+      const sendData = await sendRes.json();
+      if (sendData.ok) {
         soundEffects.playSuccessChime();
-        setSuccessMessage(data.message || 'টেস্ট নোটিফিকেশন সফলভাবে টেলিগ্রামে পাঠানো হয়েছে! টেলিগ্রাম অ্যাপ চেক করুন।');
+        setSuccessMessage(`✅ সফল হয়েছে! @${botUsername} বট থেকে আপনার চ্যাট/গ্রুপে টেস্ট নোটিফিকেশন পৌঁছে গেছে! আপনার টেলিগ্রাম চেক করুন।`);
+
+        // Add local log entry
+        const newLog: TelegramLog = {
+          id: `tg-client-${Date.now()}`,
+          event: 'test',
+          message: testMsg,
+          timestamp: new Date().toISOString(),
+          success: true,
+          simulated: false,
+        };
+        setLogs(prev => [newLog, ...prev]);
       } else {
         soundEffects.playWarningChime();
-        setErrorMessage(data.error || 'টেলিগ্রামে টেস্ট নোটিশ পাঠানো যায়নি। Bot Token ও Chat ID ঠিক আছে কিনা যাচাই করুন।');
+        if (sendData.description?.includes('chat not found')) {
+          setErrorMessage(`⚠️ চ্যাট পাওয়া যায়নি (Chat not found)! আপনি যে গ্রুপে (${cleanChat}) মেসেজ পেতে চান, টেলিগ্রামে গিয়ে সেই গ্রুপে @${botUsername} বটটিকে Add করতে হবে। আর যদি আপনার পার্সোনাল আইডিতে নোটিশ চান, তবে টেলিগ্রামে @${botUsername} এ গিয়ে নিচে /start চাপুন।`);
+        } else if (sendData.description?.includes('bot is not a member')) {
+          setErrorMessage(`⚠️ বটটি আপনার গ্রুপে মেম্বার নেই! টেলিগ্রামে আপনার ঐ গ্রুপে গিয়ে @${botUsername} বটটিকে যোগ করুন এবং মেসেজ দেওয়ার অনুমতি দিন।`);
+        } else if (sendData.description?.includes('bot was blocked')) {
+          setErrorMessage(`⚠️ বটটি টেলিগ্রামে ব্লক করা আছে! দয়া করে @${botUsername} আনব্লক করে নিচে /start চাপুন।`);
+        } else {
+          setErrorMessage(`⚠️ Telegram Error: ${sendData.description}`);
+        }
       }
-      await fetchConfigAndLogs();
+
+      // Also notify backend gracefully
+      fetch('/api/admin/telegram/test', { method: 'POST' }).catch(() => {});
     } catch (err: any) {
       soundEffects.playWarningChime();
-      setErrorMessage(`সার্ভারের সাথে যোগাযোগে সমস্যা: ${err.message}`);
+      setErrorMessage(`টেলিগ্রামে মেসেজ পাঠাতে সমস্যা: ${err.message}`);
     } finally {
       setTesting(false);
     }
@@ -149,7 +246,7 @@ export const TelegramIntegrationManager: React.FC = () => {
                   : 'bg-amber-500/20 text-amber-300 border-amber-500/30'
               }`}>
                 <Radio className={`w-3 h-3 ${isConfigured ? 'animate-pulse text-emerald-400' : 'text-amber-400'}`} />
-                {isConfigured ? 'Live Telegram Connected' : 'Setup Required (Inactive)'}
+                {isConfigured ? 'Live Telegram Configured' : 'Setup Required'}
               </span>
             </div>
             <p className="text-xs text-slate-300 mt-0.5">
@@ -172,7 +269,7 @@ export const TelegramIntegrationManager: React.FC = () => {
             type="button"
             disabled={testing}
             onClick={handleSendTest}
-            className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-400 hover:to-cyan-400 text-slate-950 text-xs font-extrabold shadow-lg shadow-blue-500/20 active:scale-95 transition-all flex items-center gap-2"
+            className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-400 hover:to-cyan-400 text-slate-950 text-xs font-extrabold shadow-lg shadow-blue-500/20 active:scale-95 transition-all flex items-center gap-2 disabled:opacity-60"
           >
             <Send className="w-3.5 h-3.5" />
             <span>{testing ? 'Sending Ping...' : 'Send Live Test Ping'}</span>
@@ -180,47 +277,22 @@ export const TelegramIntegrationManager: React.FC = () => {
         </div>
       </div>
 
-      {/* Connection Notice Card */}
-      {!isConfigured ? (
-        <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-200 text-xs flex items-start gap-3">
-          <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
-          <div className="space-y-1">
-            <h5 className="font-bold text-amber-300 text-sm">
-              টেলিগ্রাম বট এ নোটিশ না আসার কারণ:
-            </h5>
-            <p className="text-slate-300 text-xs leading-relaxed">
-              বট টোকেন (Bot Token) এবং অ্যাডমিন চ্যাট আইডি (Chat ID) এখনো কনফিগার করা হয়নি। নিচে আপনার টেলিগ্রাম বটের তথ্য বসিয়ে <strong>&ldquo;Save Telegram Webhook Settings&rdquo;</strong> বাটনে চাপ দিন। এরপর <strong>&ldquo;Send Live Test Ping&rdquo;</strong> বাটনে চাপ দিলে সরাসরি আপনার টেলিগ্রামে নোটিশ চলে যাবে।
-            </p>
-          </div>
-        </div>
-      ) : (
-        <div className="p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-200 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-          <div className="flex items-center gap-2 font-bold text-emerald-300">
-            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-            <span>টেলিগ্রাম বট সফলভাবে যুক্ত আছে! নোটিশ পাঠানো সক্রিয়।</span>
-          </div>
-          <span className="text-[11px] font-mono text-slate-300 bg-slate-900/80 px-2.5 py-1 rounded-lg border border-slate-700">
-            Chat ID: <strong className="text-emerald-400">{config.chatId}</strong>
-          </span>
-        </div>
-      )}
-
       {/* Success / Error Messages */}
       {successMessage && (
-        <div className="p-3.5 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-xs flex items-center gap-2 animate-in fade-in">
-          <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
-          <span>{successMessage}</span>
+        <div className="p-4 rounded-2xl bg-emerald-500/15 border border-emerald-500/40 text-emerald-200 text-xs flex items-start gap-2.5 animate-in fade-in leading-relaxed shadow-lg">
+          <CheckCircle2 className="w-5 h-5 shrink-0 text-emerald-400 mt-0.5" />
+          <div className="font-semibold">{successMessage}</div>
         </div>
       )}
 
       {errorMessage && (
-        <div className="p-3.5 rounded-2xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs flex items-center gap-2 animate-in fade-in">
-          <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
-          <span>{errorMessage}</span>
+        <div className="p-4 rounded-2xl bg-rose-500/15 border border-rose-500/40 text-rose-200 text-xs flex items-start gap-2.5 animate-in fade-in leading-relaxed shadow-lg">
+          <AlertCircle className="w-5 h-5 shrink-0 text-rose-400 mt-0.5" />
+          <div className="font-semibold">{errorMessage}</div>
         </div>
       )}
 
-      {/* Step by Step Setup Guide (Expandable) */}
+      {/* Expandable Setup Guide */}
       {showGuide && (
         <div className="p-5 rounded-3xl bg-slate-900/90 border border-cyan-500/30 shadow-xl space-y-4">
           <div className="flex items-center gap-2 text-cyan-400 font-bold text-sm">
@@ -235,10 +307,10 @@ export const TelegramIntegrationManager: React.FC = () => {
                 টেলিগ্রাম বট তৈরি ও টোকেন গ্রহণ:
               </span>
               <p className="text-[11px] leading-relaxed text-slate-300">
-                টেলিগ্রাম অ্যাপ খুলে <a href="https://t.me/BotFather" target="_blank" rel="noopener noreferrer" className="text-cyan-400 underline font-semibold">@BotFather</a> সার্চ করুন। এরপর <code className="bg-slate-950 px-1.5 py-0.5 rounded text-amber-300 font-mono">/newbot</code> লিখে পাঠিয়ে আপনার বটের নাম ও ইউজারনেম দিন।
+                টেলিগ্রামে <a href="https://t.me/BotFather" target="_blank" rel="noopener noreferrer" className="text-cyan-400 underline font-semibold">@BotFather</a> এ যান। এরপর <code className="bg-slate-950 px-1.5 py-0.5 rounded text-amber-300 font-mono">/newbot</code> লিখে পাঠিয়ে আপনার বটের নাম ও ইউজারনেম দিন।
               </p>
               <p className="text-[11px] text-slate-300">
-                BotFather আপনাকে একটি <strong>HTTP API Token</strong> দেবে (যেমন: <code className="text-emerald-400 font-mono">7123456789:AAH...</code>)। সেটি কপি করে নিচে <strong>Telegram Bot Token</strong> ঘরে বসান।
+                BotFather আপনাকে একটি <strong>HTTP API Token</strong> দেবে। সেটি কপি করে নিচে <strong>Telegram Bot Token</strong> ঘরে বসিয়ে পাশে <strong>&ldquo;যাচাই করুন&rdquo;</strong> বাটনে চাপ দিন।
               </p>
             </div>
 
@@ -251,17 +323,18 @@ export const TelegramIntegrationManager: React.FC = () => {
                 টেলিগ্রামে <a href="https://t.me/userinfobot" target="_blank" rel="noopener noreferrer" className="text-cyan-400 underline font-semibold">@userinfobot</a> অথবা <a href="https://t.me/GetMyChatID_Bot" target="_blank" rel="noopener noreferrer" className="text-cyan-400 underline font-semibold">@GetMyChatID_Bot</a> এ গিয়ে <code className="bg-slate-950 px-1.5 py-0.5 rounded text-amber-300 font-mono">/start</code> চাপুন।
               </p>
               <p className="text-[11px] text-slate-300">
-                সেখান থেকে প্রাপ্ত <strong>Id</strong> নম্বরটি (যেমন: <code className="text-emerald-400 font-mono">987654321</code>) কপি করে নিচে <strong>Admin Chat ID</strong> ঘরে বসান।
+                সেখান থেকে প্রাপ্ত <strong>Id</strong> নম্বরটি কপি করে নিচে <strong>Admin Chat ID</strong> ঘরে বসান।
               </p>
             </div>
 
             <div className="p-3.5 rounded-2xl bg-amber-950/20 border border-amber-500/30 space-y-2 md:col-span-2 text-amber-200">
               <span className="font-bold text-amber-300 flex items-center gap-1.5">
                 <AlertTriangle className="w-4 h-4 text-amber-400" />
-                ৩. সবচেয়ে গুরুত্বপূর্ণ ধাপ (Bot Start করা):
+                ৩. সবচেয়ে গুরুত্বপূর্ণ ধাপ (Bot Start করা বা গ্রুপে Add করা):
               </span>
               <p className="text-[11px] leading-relaxed text-slate-300">
-                আপনার তৈরি করা বটের লিংকে (যেমন: <code className="text-cyan-400 font-mono">t.me/your_bot_username</code>) ঢুকে <strong>অবশ্যই একবার /start বাটনে চাপ দিতে হবে</strong>। টেলিগ্রামের প্রাইভেসি পলিসি অনুযায়ী আপনি নিজে বট চালু না করলে কোনো বট আপনাকে মেসেজ পাঠাতে পারে না।
+                • <strong>পার্সোনাল আইডিতে নোটিশ চাইলে:</strong> টেলিগ্রামে আপনার তৈরি করা বটের লিংকে গিয়ে অবশ্যই নিচে <strong>/start</strong> বাটনে চাপ দিন।<br />
+                • <strong>গ্রুপ বা চ্যানেলে (-100...) নোটিশ চাইলে:</strong> আপনার বটটিকে অবশ্যই ঐ গ্রুপে <strong>Member বা Admin হিসেবে Add করতে হবে</strong>, না হলে টেলিগ্রাম মেসেজ ডেলিভারি ব্লক করে দেবে।
               </p>
             </div>
           </div>
@@ -277,41 +350,60 @@ export const TelegramIntegrationManager: React.FC = () => {
               <Settings className="w-4 h-4 text-cyan-400" />
               <span>Webhook Credentials &amp; Triggers</span>
             </h5>
-            <span className="text-[10px] text-slate-400 font-mono">
-              Auto-Broadcast Engine
-            </span>
+            {verifiedBotInfo && (
+              <span className="text-[11px] text-emerald-400 font-mono font-bold flex items-center gap-1 bg-emerald-500/10 px-2 py-0.5 rounded-lg border border-emerald-500/30">
+                <CheckCheck className="w-3.5 h-3.5" />
+                @{verifiedBotInfo.username}
+              </span>
+            )}
           </div>
 
           <form onSubmit={handleSaveConfig} className="space-y-4">
             <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1">
-                Telegram Bot Token (from @BotFather) *
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-xs font-semibold text-slate-300">
+                  Telegram Bot Token (from @BotFather) *
+                </label>
+                <button
+                  type="button"
+                  disabled={verifyingToken || !config.botToken.trim()}
+                  onClick={handleVerifyToken}
+                  className="text-[11px] font-bold text-cyan-400 hover:text-cyan-300 flex items-center gap-1 transition-colors disabled:opacity-50"
+                  title="টোকেনটি সঠিক কিনা সরাসরি টেলিগ্রামের সাথে চেক করুন"
+                >
+                  <Search className={`w-3 h-3 ${verifyingToken ? 'animate-spin' : ''}`} />
+                  <span>{verifyingToken ? 'যাচাই হচ্ছে...' : 'টোকেন যাচাই করুন (Verify)'}</span>
+                </button>
+              </div>
+
               <input
                 type="text"
                 placeholder="যেমন: 7123456789:AAHxxxxx_xxxxxxxxxxxxxxx"
                 value={config.botToken}
-                onChange={e => setConfig({ ...config, botToken: e.target.value })}
+                onChange={e => {
+                  setConfig({ ...config, botToken: e.target.value });
+                  setVerifiedBotInfo(null);
+                }}
                 className="w-full px-3 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-xs text-white font-mono placeholder-slate-500 focus:outline-none focus:border-cyan-500"
               />
               <p className="text-[10px] text-slate-500 mt-1">
-                BotFather যে টোকেন দিয়েছে তা হুবহু পেস্ট করুন।
+                BotFather যে Token দিয়েছে তা হুবহু পেস্ট করুন।
               </p>
             </div>
 
             <div>
               <label className="block text-xs font-semibold text-slate-300 mb-1">
-                Admin Chat ID or Channel ID *
+                Admin Chat ID or Group/Channel ID *
               </label>
               <input
                 type="text"
-                placeholder="যেমন: 987654321 অথবা চ্যানেলের জন্য -100123456789"
+                placeholder="যেমন: 987654321 অথবা গ্রুপের জন্য -1003834732727"
                 value={config.chatId}
                 onChange={e => setConfig({ ...config, chatId: e.target.value })}
                 className="w-full px-3 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-xs text-white font-mono placeholder-slate-500 focus:outline-none focus:border-cyan-500"
               />
               <p className="text-[10px] text-slate-500 mt-1">
-                @userinfobot থেকে প্রাপ্ত আপনার ব্যক্তিগত টেলিগ্রাম আইডি নম্বর।
+                গ্রুপ/চ্যানেল আইডি হলে বটটিকে অবশ্যই ঐ গ্রুপে অ্যাড করে মেসেজ দেওয়ার পারমিশন দিন।
               </p>
             </div>
 
@@ -371,7 +463,7 @@ export const TelegramIntegrationManager: React.FC = () => {
 
             <div className="space-y-2.5 max-h-[380px] overflow-y-auto pr-1">
               {logs.length === 0 ? (
-                <div className="py-8 text-center text-xs text-slate-500">
+                <div className="py-12 text-center text-xs text-slate-500">
                   এখনো কোনো টেলিগ্রাম অ্যালার্ট রেকর্ড করা হয়নি।
                 </div>
               ) : (
@@ -415,7 +507,7 @@ export const TelegramIntegrationManager: React.FC = () => {
                         }`} />
                         <span className={log.simulated ? 'text-amber-300' : log.success ? 'text-emerald-400' : 'text-rose-400'}>
                           {log.simulated
-                            ? 'ইন-অ্যাপ লগ (বট ক্রেডেনশিয়াল ছাড়া)'
+                            ? 'ইন-অ্যাপ লগ (সরাসরি বট ছাড়া)'
                             : log.success
                             ? 'টেলিগ্রাম বটের মাধ্যমে সফলভাবে পাঠানো হয়েছে'
                             : 'টেলিগ্রাম ডেলিভারি ব্যর্থ'}
@@ -430,7 +522,7 @@ export const TelegramIntegrationManager: React.FC = () => {
 
           <div className="mt-4 pt-3 border-t border-slate-800 text-[11px] text-slate-400 flex items-center justify-between">
             <span>VaiVaiZone Official Bot Engine</span>
-            <span className="text-cyan-400 font-mono text-[10px]">Real-time Dispatch</span>
+            <span className="text-cyan-400 font-mono text-[10px]">Direct CORS Webhook</span>
           </div>
         </div>
       </div>

@@ -724,4 +724,47 @@ export const persistentStore = {
     } catch {}
     return true;
   },
+
+  dispatchTelegramDirect: async (
+    event: 'deposit' | 'new_order' | 'kyc_submitted' | 'registration' | 'test',
+    messageHtml: string
+  ): Promise<boolean> => {
+    try {
+      const cfg = await persistentStore.getTelegramConfig();
+      if (!cfg.enabled || !cfg.botToken || !cfg.chatId) return false;
+      if (event === 'deposit' && cfg.alertOnDeposit === false) return false;
+      if (event === 'new_order' && cfg.alertOnOrder === false) return false;
+      if (event === 'kyc_submitted' && cfg.alertOnKyc === false) return false;
+      if (event === 'registration' && cfg.alertOnRegistration === false) return false;
+
+      const cleanToken = cfg.botToken.trim().replace(/^bot/i, '');
+      const cleanChat = cfg.chatId.trim();
+      if (!cleanToken || !cleanChat) return false;
+
+      const res = await fetch(`https://api.telegram.org/bot${cleanToken}/sendMessage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: cleanChat,
+          text: messageHtml,
+          parse_mode: 'HTML',
+        }),
+      });
+      const data = await res.json();
+      if (!data.ok) {
+        // Fallback plain text
+        await fetch(`https://api.telegram.org/bot${cleanToken}/sendMessage`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chat_id: cleanChat,
+            text: messageHtml.replace(/<[^>]*>?/gm, ''),
+          }),
+        });
+      }
+      return true;
+    } catch {
+      return false;
+    }
+  },
 };
