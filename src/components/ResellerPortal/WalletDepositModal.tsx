@@ -24,27 +24,57 @@ import {
 } from 'lucide-react';
 
 const fallbackAccounts: PaymentAccount[] = [
-  { id: 'acc-1', name: 'bKash', number: '01799887766', type: 'Merchant Payment', instruction: 'Make Payment করুন', enabled: true },
-  { id: 'acc-2', name: 'Nagad', number: '01811223344', type: 'Personal (Send Money)', instruction: 'Send Money করুন', enabled: true },
-  { id: 'acc-3', name: 'Rocket', number: '01922334455-8', type: 'Personal', instruction: 'Send Money করুন', enabled: true },
-  { id: 'acc-4', name: 'Upay', number: '01988776655', type: 'Personal', instruction: 'Send Money করুন', enabled: true },
-  { id: 'acc-5', name: 'Bank Asia', number: 'A/C: 088192847192 (VaiVaiZone Tech)', type: 'Bank Transfer', instruction: 'ব্যাংক ট্রান্সফার করুন', enabled: true },
+  { id: 'bkash', name: 'bKash', number: '', type: 'Merchant / Personal', instruction: 'বিকাশ পেমেন্ট বা সেন্ড মানি করুন', enabled: true },
+  { id: 'nagad', name: 'Nagad', number: '', type: 'Personal (Send Money)', instruction: 'নগদ সেন্ড মানি করুন', enabled: true },
+  { id: 'rocket', name: 'Rocket', number: '', type: 'Personal (Send Money)', instruction: 'রকেট সেন্ড মানি করুন', enabled: true },
+  { id: 'bank', name: 'Bank Transfer', number: '', type: 'Bank Deposit', instruction: 'ব্যাংক ট্রান্সফার করুন', enabled: true },
 ];
 
 export const WalletDepositModal: React.FC = () => {
   const { openDepositModal, setOpenDepositModal, currentUser, refreshUser } = useAuth();
 
-  const [paymentAccounts, setPaymentAccounts] = useState<PaymentAccount[]>(fallbackAccounts);
-  const [selectedAccountId, setSelectedAccountId] = useState<string>(fallbackAccounts[0].id);
+  const [paymentAccounts, setPaymentAccounts] = useState<PaymentAccount[]>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const raw = localStorage.getItem('vaivai_payment_settings');
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed?.accounts) && parsed.accounts.length > 0) {
+            const enabled = parsed.accounts.filter((a: PaymentAccount) => a.enabled);
+            if (enabled.length > 0) return enabled;
+          }
+        }
+      } catch {}
+    }
+    return fallbackAccounts;
+  });
+
+  const [selectedAccountId, setSelectedAccountId] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const raw = localStorage.getItem('vaivai_payment_settings');
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed?.accounts) && parsed.accounts.length > 0) {
+            const first = parsed.accounts.find((a: PaymentAccount) => a.enabled) || parsed.accounts[0];
+            if (first) return first.id;
+          }
+        }
+      } catch {}
+    }
+    return 'bkash';
+  });
+
   const [depositNotice, setDepositNotice] = useState<string>('');
   const [minDeposit, setMinDeposit] = useState<number>(100);
   const [supportWhatsapp, setSupportWhatsapp] = useState<string>('01811223344');
 
   const [amount, setAmount] = useState('2000');
-  const [senderNumber, setSenderNumber] = useState(currentUser?.phone || '01819283746');
+  const [senderNumber, setSenderNumber] = useState(currentUser?.phone || '');
   const [trxId, setTrxId] = useState(`BKS${Date.now().toString().slice(-6)}`);
   const [copied, setCopied] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [loadingMethods, setLoadingMethods] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [submittedSuccessData, setSubmittedSuccessData] = useState<DepositRequest | null>(null);
@@ -53,13 +83,17 @@ export const WalletDepositModal: React.FC = () => {
   const [myDeposits, setMyDeposits] = useState<DepositRequest[]>([]);
 
   const fetchPaymentMethods = async () => {
+    setLoadingMethods(true);
     try {
       const data = await persistentStore.getPaymentSettings();
       if (data.accounts && Array.isArray(data.accounts) && data.accounts.length > 0) {
-        setPaymentAccounts(data.accounts.filter(a => a.enabled));
-        if (!data.accounts.some((a: PaymentAccount) => a.id === selectedAccountId && a.enabled)) {
-          const firstEnabled = data.accounts.find(a => a.enabled) || data.accounts[0];
-          setSelectedAccountId(firstEnabled.id);
+        const enabled = data.accounts.filter(a => a.enabled);
+        if (enabled.length > 0) {
+          setPaymentAccounts(enabled);
+          setSelectedAccountId(prev => {
+            if (enabled.some(a => a.id === prev)) return prev;
+            return enabled[0]?.id || 'bkash';
+          });
         }
       }
       if (data.notice) {
@@ -72,7 +106,9 @@ export const WalletDepositModal: React.FC = () => {
         setSupportWhatsapp(data.supportWhatsapp);
       }
     } catch {
-      // Use fallback accounts
+      // Use existing accounts
+    } finally {
+      setLoadingMethods(false);
     }
   };
 
@@ -86,9 +122,24 @@ export const WalletDepositModal: React.FC = () => {
     }
   };
 
+  // Pre-load payment methods on mount
+  useEffect(() => {
+    fetchPaymentMethods();
+    fetchMyDeposits();
+  }, []);
+
+  // Sync senderNumber with currentUser.phone when available
+  useEffect(() => {
+    if (currentUser?.phone && !senderNumber) {
+      setSenderNumber(currentUser.phone);
+    }
+  }, [currentUser?.phone]);
+
   useEffect(() => {
     if (openDepositModal) {
       setSubmittedSuccessData(null);
+      setError(null);
+      setSuccess(null);
       fetchPaymentMethods();
       fetchMyDeposits();
     }
@@ -379,7 +430,7 @@ export const WalletDepositModal: React.FC = () => {
                   VaiVaiZone অফিসিয়াল {selectedAccount.name} নাম্বার ({selectedAccount.type})
                 </span>
                 <span className="font-mono font-extrabold text-emerald-400 text-base sm:text-lg select-all block mt-0.5">
-                  {selectedAccount.number}
+                  {selectedAccount.number || (loadingMethods ? 'নাম্বার লোড হচ্ছে...' : 'নাম্বার শীঘ্রই যুক্ত করা হবে')}
                 </span>
                 {selectedAccount.instruction && (
                   <p className="text-[11px] text-amber-300/90 mt-1 flex items-center gap-1 font-medium">
@@ -390,7 +441,8 @@ export const WalletDepositModal: React.FC = () => {
               <button
                 type="button"
                 onClick={handleCopy}
-                className="px-3 py-2 rounded-xl bg-slate-700 hover:bg-slate-600 active:scale-95 text-slate-200 transition-all flex items-center gap-1.5 shrink-0 font-bold border border-slate-600"
+                disabled={!selectedAccount?.number}
+                className="px-3 py-2 rounded-xl bg-slate-700 hover:bg-slate-600 active:scale-95 text-slate-200 transition-all flex items-center gap-1.5 shrink-0 font-bold border border-slate-600 disabled:opacity-50"
               >
                 {copied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4 text-cyan-400" />}
                 <span className="text-[11px]">{copied ? 'কপি হয়েছে!' : 'নাম্বার কপি'}</span>

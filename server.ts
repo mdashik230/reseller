@@ -875,6 +875,9 @@ app.get('/api/wallet/transactions', (req, res) => {
 
 // Public route for Resellers to get active payment numbers, deposit notice, and support Whatsapp
 app.get('/api/payment-methods', (req, res) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
   const enabledAccounts = paymentSettings.accounts.filter(a => a.enabled);
   return res.json({
     accounts: enabledAccounts,
@@ -1433,4 +1436,8 @@ async function startServer() {
   });
 }
 
-startServer();
+if (!process.env.VERCEL) {
+  startServer();
+}
+
+export default app;

@@ -254,6 +254,38 @@ export const persistentStore = {
 
   // Payment Settings
   getPaymentSettings: async (): Promise<PaymentSettings> => {
+    // 1. Always query the server first to ensure the reseller gets live, updated payment numbers
+    try {
+      const res = await fetch(`/api/payment-methods?_t=${Date.now()}`, {
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          Pragma: 'no-cache',
+        },
+      });
+      if (res.ok) {
+        const contentType = res.headers.get('content-type') || '';
+        if (contentType.includes('application/json')) {
+          const data = await res.json();
+          if (data && Array.isArray(data.accounts) && data.accounts.length > 0) {
+            const settings: PaymentSettings = {
+              accounts: data.accounts,
+              notice: data.notice || defaultPaymentSettings.notice,
+              minDepositAmount: data.minDepositAmount || 100,
+              supportWhatsapp: data.supportWhatsapp || defaultPaymentSettings.supportWhatsapp,
+              supportNotice: data.supportNotice || defaultPaymentSettings.supportNotice,
+              updatedAt: data.updatedAt,
+            };
+            if (typeof window !== 'undefined') {
+              localStorage.setItem('vaivai_payment_settings', JSON.stringify(settings));
+            }
+            return settings;
+          }
+        }
+      }
+    } catch {}
+
+    // 2. Fallback to local storage if offline or server is temporarily unreachable
     if (typeof window !== 'undefined') {
       try {
         const raw = localStorage.getItem('vaivai_payment_settings');
@@ -271,28 +303,6 @@ export const persistentStore = {
       } catch {}
     }
 
-    try {
-      const res = await fetch('/api/payment-methods');
-      const data = await res.json();
-      if (data && data.accounts) {
-        const settings: PaymentSettings = {
-          accounts: data.accounts,
-          notice: data.notice || defaultPaymentSettings.notice,
-          minDepositAmount: data.minDepositAmount || 100,
-          supportWhatsapp: data.supportWhatsapp || defaultPaymentSettings.supportWhatsapp,
-          supportNotice: data.supportNotice || defaultPaymentSettings.supportNotice,
-          updatedAt: data.updatedAt,
-        };
-        if (typeof window !== 'undefined') {
-          localStorage.setItem('vaivai_payment_settings', JSON.stringify(settings));
-        }
-        return settings;
-      }
-    } catch {}
-
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('vaivai_payment_settings', JSON.stringify(defaultPaymentSettings));
-    }
     return defaultPaymentSettings;
   },
 
@@ -303,11 +313,22 @@ export const persistentStore = {
       dispatchStoreEvent('payments');
     }
     try {
-      await fetch('/api/admin/payment-methods', {
+      const res = await fetch('/api/admin/payment-methods', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updated),
       });
+      if (res.ok) {
+        const contentType = res.headers.get('content-type') || '';
+        if (contentType.includes('application/json')) {
+          const data = await res.json();
+          if (data && data.paymentSettings) {
+            if (typeof window !== 'undefined') {
+              localStorage.setItem('vaivai_payment_settings', JSON.stringify(data.paymentSettings));
+            }
+          }
+        }
+      }
     } catch {}
     return true;
   },

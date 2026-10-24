@@ -216,6 +216,14 @@
   },
   "telegramLogs": [
     {
+      "id": "tg-1792849208115-fgk4u",
+      "event": "test",
+      "message": "<b>⚙️ PAYMENT METHODS UPDATED!</b>\n💳 <b>Active Accounts:</b> bKash: 01700112233, Nagad: 01800112233\n🕒 <i>Updated by Master Admin</i>",
+      "timestamp": "2026-10-24T13:40:08.115Z",
+      "success": true,
+      "simulated": true
+    },
+    {
       "id": "tg-1792840709225-vgcqg",
       "event": "deposit",
       "message": "<b>✅ DEPOSIT APPROVED & CREDITED!</b>\n👤 <b>Reseller:</b> Test Reseller\n💵 <b>Amount Credited:</b> ৳2,000\n📊 <b>New Total:</b> ৳2,000 (Usable: ৳0)",
@@ -297,9 +305,9 @@
         "minDeposit": 500
       }
     ],
-    "updatedAt": "2026-10-24T10:45:15.773Z",
+    "updatedAt": "2026-10-24T13:40:13.660Z",
     "supportWhatsapp": "01811223344",
     "supportNotice": "২৪/৭ অফিসিয়াল হোয়াটসঅ্যাপ সাপোর্ট লাইভ আছে। যেকোনো প্রয়োজনে চ্যাট করুন।"
   },
-  "savedAt": "2026-10-24T11:18:29.225Z"
+  "savedAt": "2026-10-24T13:40:13.660Z"
 }
